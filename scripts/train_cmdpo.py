@@ -35,7 +35,9 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    use_fp16 = torch.cuda.is_available() and not use_bf16
+    dtype = torch.bfloat16 if use_bf16 else (torch.float16 if use_fp16 else torch.float32)
     policy = AutoModelForCausalLM.from_pretrained(
         args.model,
         torch_dtype=dtype,
@@ -72,7 +74,8 @@ def main() -> None:
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         logging_steps=10,
         save_steps=500,
-        bf16=torch.cuda.is_available(),
+        bf16=use_bf16,
+        fp16=use_fp16,
         remove_unused_columns=False,
         report_to=[],
     )

@@ -25,6 +25,8 @@ runs/
 wandb/
 
 # Model artifacts
+Qwen*/
+models/
 *.safetensors
 *.bin
 *.pt
