@@ -1,0 +1,11 @@
+model: Qwen/Qwen2.5-Math-7B-Instruct
+data: data/processed/gsm8k_cmdpo_localized.jsonl
+output_dir: outputs/qwen2_5_7b_gsm8k_cmdpo
+beta: 0.1
+gamma: 0.5
+max_length: 1536
+learning_rate: 1.0e-5
+epochs: 1
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16
+use_lora: true
