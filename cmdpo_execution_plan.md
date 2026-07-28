@@ -1367,3 +1367,89 @@ cmdpo_gamma075,35.0922,-16.8402,7.8997,-14.4158
 - gamma 越大，combined CM-DPO 加权区域也压得越强：`cmdpo_delta` 从 `-8.7979` 到 `-14.4158`。
 - 但更强 suppression 没有直接转化为更高 generation accuracy；当前小模型/小数据下，`gamma=0.25` 是更合适的下一轮默认值。
 - 下一步应优先用 `gamma=0.25` 扩到 1000-2000 条 harder/GSM8K-style preference 数据，并保留 vanilla、prefix-masked、first-error-only 作为对照。
+
+## 22. Harder1000 gamma=0.25 scale-up
+
+按上一节结论，将 CM-DPO 默认值固定为 `gamma=0.25`，把 harder preference train set 扩到 1000 条：
+
+```text
+data/processed/harder_math_pairs_1000.jsonl
+data/processed/variants_harder1000_gamma025/harder_math_pairs_1000_vanilla.jsonl
+data/processed/variants_harder1000_gamma025/harder_math_pairs_1000_prefix_masked.jsonl
+data/processed/variants_harder1000_gamma025/harder_math_pairs_1000_first_error_only.jsonl
+data/processed/variants_harder1000_gamma025/harder_math_pairs_1000_cmdpo.jsonl
+```
+
+数据质量：
+
+```text
+num_rows: 1000
+chosen_correct: 1000 / 1000
+rejected_wrong: 1000 / 1000
+step_count_dist: {4: 833, 5: 167}
+first_error_dist: {1: 834, 0: 166}
+template_dist: almost uniform across 6 templates
+```
+
+训练设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 1
+max_length: 768
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+```
+
+训练输出：
+
+```text
+outputs/qwen0_5b_harder1000_gamma025_vanilla
+outputs/qwen0_5b_harder1000_gamma025_prefix_masked
+outputs/qwen0_5b_harder1000_gamma025_first_error_only
+outputs/qwen0_5b_harder1000_gamma025_cmdpo
+```
+
+训练损失：
+
+```text
+vanilla: 0.2855
+prefix_masked: 0.0765
+first_error_only: 0.0459
+cmdpo_gamma025: 0.0485
+```
+
+在 `harder_math_eval_100.jsonl` 上做 Qwen chat template + greedy + `max_new_tokens=256` 的 batch generation accuracy：
+
+```text
+model,accuracy,correct,total
+base,0.3900,39,100
+vanilla,0.2700,27,100
+prefix_masked,0.4300,43,100
+first_error_only,0.4300,43,100
+cmdpo_gamma025,0.4800,48,100
+```
+
+在 `harder_math_pairs_1000.jsonl` 训练集上做 likelihood decomposition：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-27.2283,-36.7031,-45.2128,-55.7218
+prefix_masked,33.7599,-16.7356,-21.4733,-25.1865
+first_error_only,34.0311,-11.8053,14.2849,-6.3251
+cmdpo_gamma025,34.3726,-11.6410,13.1811,-6.6936
+```
+
+结论：
+
+- 扩到 1000 条后，`gamma=0.25` 的 CM-DPO 直接拿到了当前最好 generation accuracy：`48/100`。
+- 这比 base 的 `39/100` 高 9 分，也比 prefix-masked / first-error-only 的 `43/100` 高 5 分。
+- Vanilla 仍然明显伤害生成能力，掉到 `27/100`。
+- likelihood 分解保持一致：vanilla 压制 prefix 最狠；CM-DPO 保留 prefix，同时压低 first-error 区域。
+- 相比 first-error-only，CM-DPO 仍然维持更合理的 suffix decay，而不是把所有后缀都放掉。
+- 这轮结果说明 `gamma=0.25` 不只是机制上成立，也开始在真实 generation accuracy 上赢过更强的 masked 对照。
+- 下一步可以把这套配置再扩到更接近论文规模的数据，或者把评估集替换成 GSM8K-style preference / generation pairing。
