@@ -1538,3 +1538,61 @@ cmdpo_gamma025,35.2339,-20.4700,16.6875,-13.9439
 - CM-DPO 继续保留正确 prefix：`prefix_delta=35.2339`，同时比 first-error-only 更强地压低 first-error 区域：`error_delta=-20.4700` vs `-18.0821`。
 - 和 harder1000 的 `48/100` 相比，harder2000 的 CM-DPO 是 `47/100`，说明优势可复现但不随数据量单调上升。
 - 当前证据支持的说法应该是：在 Qwen2.5-0.5B + LoRA + harder arithmetic preference 上，CM-DPO gamma=0.25 稳定优于 vanilla 和两个 masked 对照；下一步需要扩大 held-out eval、换 seed，并引入 GSM8K-style 任务验证泛化。
+
+## 24. Harder held-out eval500
+
+为了确认 `harder_math_eval_100.jsonl` 上的结果不是 100 题小评估波动，生成了 500 条 held-out harder arithmetic eval：
+
+```text
+data/processed/harder_math_eval_500.jsonl
+num_rows: 500
+seed: 123
+templates: inventory, tickets, garden, classroom, recipe, shipping
+```
+
+评估设置保持不变：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+generation: Qwen chat template, greedy decoding
+max_new_tokens: 256
+batch_size: 8
+```
+
+直接复用 harder1000 gamma=0.25 训练得到的 LoRA adapters，在 500 题 held-out 上评估：
+
+```text
+summary: outputs/qwen0_5b_harder_eval500_harder1000_accuracy.jsonl
+details: outputs/qwen0_5b_harder_eval500_harder1000_details.jsonl
+
+model,accuracy,correct,total
+base,0.4100,205,500
+vanilla,0.2620,131,500
+prefix_masked,0.4240,212,500
+first_error_only,0.4520,226,500
+cmdpo_gamma025,0.4640,232,500
+```
+
+直接复用 harder2000 gamma=0.25 训练得到的 LoRA adapters，在同一份 500 题 held-out 上评估：
+
+```text
+summary: outputs/qwen0_5b_harder_eval500_harder2000_accuracy.jsonl
+details: outputs/qwen0_5b_harder_eval500_harder2000_details.jsonl
+
+model,accuracy,correct,total
+base,0.4100,205,500
+vanilla,0.1860,93,500
+prefix_masked,0.3600,180,500
+first_error_only,0.4400,220,500
+cmdpo_gamma025,0.4900,245,500
+```
+
+结论：
+
+- 500 题 held-out 上，CM-DPO 仍然是两组训练规模里的最好方法。
+- harder1000 adapter: CM-DPO `46.4%`，高于 base `41.0%`、prefix-masked `42.4%`、first-error-only `45.2%`。
+- harder2000 adapter: CM-DPO `49.0%`，高于 base `41.0%`、prefix-masked `36.0%`、first-error-only `44.0%`。
+- harder2000 的 CM-DPO 相比 harder1000 从 `46.4%` 提升到 `49.0%`，在更大的 held-out eval 上显示出正向 scaling。
+- Vanilla DPO 的伤害在 500 题上更稳定：harder1000 vanilla `26.2%`，harder2000 vanilla `18.6%`。
+- 这轮结果比 eval100 更支持当前主张：CM-DPO 的优势不是单个小评估集上的偶然波动，而是在更大的 synthetic harder arithmetic held-out 上持续成立。
+- 下一步应做多 seed 复现实验，建议先固定 harder2000 + `gamma=0.25`，跑 `seed=1,2,3`，然后再把数据构造迁移到 GSM8K-style。
