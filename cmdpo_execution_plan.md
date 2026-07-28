@@ -1453,3 +1453,88 @@ cmdpo_gamma025,34.3726,-11.6410,13.1811,-6.6936
 - 相比 first-error-only，CM-DPO 仍然维持更合理的 suffix decay，而不是把所有后缀都放掉。
 - 这轮结果说明 `gamma=0.25` 不只是机制上成立，也开始在真实 generation accuracy 上赢过更强的 masked 对照。
 - 下一步可以把这套配置再扩到更接近论文规模的数据，或者把评估集替换成 GSM8K-style preference / generation pairing。
+
+## 23. Harder2000 gamma=0.25 scale-up
+
+继续使用 `gamma=0.25`，将 harder preference train set 从 1000 条扩到 2000 条：
+
+```text
+data/processed/harder_math_pairs_2000.jsonl
+data/processed/variants_harder2000_gamma025/harder_math_pairs_2000_vanilla.jsonl
+data/processed/variants_harder2000_gamma025/harder_math_pairs_2000_prefix_masked.jsonl
+data/processed/variants_harder2000_gamma025/harder_math_pairs_2000_first_error_only.jsonl
+data/processed/variants_harder2000_gamma025/harder_math_pairs_2000_cmdpo.jsonl
+```
+
+数据质量：
+
+```text
+num_rows: 2000
+chosen_correct: 2000 / 2000
+rejected_wrong: 2000 / 2000
+step_count_dist: {4: 1666, 5: 334}
+first_error_dist: {1: 1667, 0: 333}
+template_dist: inventory 334, tickets 334, garden/classroom/recipe/shipping 333 each
+```
+
+训练设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 1
+max_length: 768
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+```
+
+训练输出：
+
+```text
+outputs/qwen0_5b_harder2000_gamma025_vanilla
+outputs/qwen0_5b_harder2000_gamma025_prefix_masked
+outputs/qwen0_5b_harder2000_gamma025_first_error_only
+outputs/qwen0_5b_harder2000_gamma025_cmdpo
+```
+
+训练损失：
+
+```text
+vanilla: 0.1542
+prefix_masked: 0.0376
+first_error_only: 0.0240
+cmdpo_gamma025: 0.0250
+```
+
+在 `harder_math_eval_100.jsonl` 上做 Qwen chat template + greedy + `max_new_tokens=256` 的 batch generation accuracy：
+
+```text
+model,accuracy,correct,total
+base,0.3900,39,100
+vanilla,0.2000,20,100
+prefix_masked,0.3500,35,100
+first_error_only,0.3900,39,100
+cmdpo_gamma025,0.4700,47,100
+```
+
+在 `harder_math_pairs_2000.jsonl` 训练集上做 likelihood decomposition：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-36.0250,-58.8128,-72.2893,-89.2743
+prefix_masked,35.1021,-27.3942,-44.4235,-46.0984
+first_error_only,35.1121,-18.0821,17.3035,-11.2242
+cmdpo_gamma025,35.2339,-20.4700,16.6875,-13.9439
+```
+
+结论：
+
+- 扩到 2000 条后，`gamma=0.25` 的 CM-DPO 仍然是 generation accuracy 最好的训练变体：`47/100`。
+- 这比 base 的 `39/100` 高 8 分，也明显高于 vanilla 的 `20/100`、prefix-masked 的 `35/100`、first-error-only 的 `39/100`。
+- Vanilla DPO 在 2000 条下伤害更重，generation accuracy 从 base `39/100` 掉到 `20/100`，likelihood 上也继续大幅压低 prefix。
+- CM-DPO 继续保留正确 prefix：`prefix_delta=35.2339`，同时比 first-error-only 更强地压低 first-error 区域：`error_delta=-20.4700` vs `-18.0821`。
+- 和 harder1000 的 `48/100` 相比，harder2000 的 CM-DPO 是 `47/100`，说明优势可复现但不随数据量单调上升。
+- 当前证据支持的说法应该是：在 Qwen2.5-0.5B + LoRA + harder arithmetic preference 上，CM-DPO gamma=0.25 稳定优于 vanilla 和两个 masked 对照；下一步需要扩大 held-out eval、换 seed，并引入 GSM8K-style 任务验证泛化。
