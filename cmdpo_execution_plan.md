@@ -947,3 +947,423 @@ Prefix Protection: 成立
 First-error Concentration: 成立
 Post-error Decay: 成立
 ```
+
+## 16. Qwen2.5-0.5B 20 条 LoRA 对照
+
+模型已下载到本地：
+
+```text
+/home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+```
+
+先完成了 Qwen2.5-0.5B + LoRA + CM-DPO smoke training：
+
+```text
+outputs/qwen2_5_0_5b_api20_cmdpo_smoke
+train_loss: 0.5731
+```
+
+随后基于 `data/processed/api_math_pairs_20_localized.jsonl` 派生四组训练数据：
+
+```text
+data/processed/variants/api_math_pairs_20_vanilla.jsonl
+data/processed/variants/api_math_pairs_20_prefix_masked.jsonl
+data/processed/variants/api_math_pairs_20_first_error_only.jsonl
+data/processed/variants/api_math_pairs_20_cmdpo.jsonl
+```
+
+普通设置结果：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-16.5625,-0.8046,-6.7406,-3.5234
+prefix_masked,2.2125,-0.1771,-7.8250,-3.3365
+first_error_only,3.1187,0.1588,1.1062,0.6370
+cmdpo,3.0063,0.0846,-2.8281,-1.0529
+```
+
+stress 设置使用：
+
+```text
+beta=0.5
+learning_rate=5e-5
+epochs=5
+max_length=768
+gradient_accumulation_steps=4
+```
+
+stress 结果：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-38.4363,-1.1394,-15.2126,-7.0602
+prefix_masked,0.9216,-1.7893,-31.5832,-14.4206
+first_error_only,8.8576,1.6688,9.7734,5.6458
+cmdpo,9.2323,0.9323,-1.4657,0.5693
+```
+
+观察：
+
+- Vanilla DPO 在 Qwen0.5B 上同样严重压低 rejected 中的正确前缀。
+- Prefix-masked 和 CM-DPO 都能保护正确前缀。
+- First-error-only 对后缀几乎不施加惩罚，stress 下甚至提升了错误后缀 likelihood。
+- CM-DPO 保留了前缀保护，同时仍对错误后缀施加 decay penalty。
+
+## 17. API 60 小型 held-out 实验
+
+为了从 overfit debug 进入 held-out 评估，重新生成了更大的 API arithmetic preference set：
+
+```bash
+python3 scripts/build_api_math_pairs.py \
+  --output data/processed/api_math_pairs_60.jsonl \
+  --limit 60
+```
+
+实际得到 58 条可用 preference pairs。之后使用 API rollout localization：
+
+```bash
+python3 scripts/localize_errors_api.py \
+  --input data/processed/api_math_pairs_60.jsonl \
+  --output data/processed/api_math_pairs_60_localized.jsonl \
+  --num-rollouts 2 \
+  --max-tokens 192
+```
+
+localized 数据质量：
+
+```text
+num_rows: 58
+step_count_dist: {2: 2, 3: 20, 4: 8, 5: 24, 6: 3, 7: 1}
+first_error_dist: {1: 31, 2: 6, 3: 16, 4: 5}
+confidence_dist: {0.0: 10, 0.5: 9, 1.0: 39}
+```
+
+为降低 localization 噪声，过滤 `localization_confidence >= 0.5`：
+
+```text
+data/processed/api_math_pairs_60_confident.jsonl
+num_rows: 48
+```
+
+按 80/20 随机拆分：
+
+```text
+data/processed/api_math_pairs_60_confident_train.jsonl  # 38 rows
+data/processed/api_math_pairs_60_confident_test.jsonl   # 10 rows
+```
+
+训练集派生四组权重版本：
+
+```text
+data/processed/variants60/api_math_pairs_60_confident_train_vanilla.jsonl
+data/processed/variants60/api_math_pairs_60_confident_train_prefix_masked.jsonl
+data/processed/variants60/api_math_pairs_60_confident_train_first_error_only.jsonl
+data/processed/variants60/api_math_pairs_60_confident_train_cmdpo.jsonl
+```
+
+四组训练统一使用：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.5
+learning_rate: 5e-5
+epochs: 5
+max_length: 768
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+```
+
+训练输出：
+
+```text
+outputs/qwen0_5b_api60_confident_vanilla
+outputs/qwen0_5b_api60_confident_prefix_masked
+outputs/qwen0_5b_api60_confident_first_error_only
+outputs/qwen0_5b_api60_confident_cmdpo
+```
+
+训练集 likelihood delta：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-43.7632,-33.6977,-27.7735,-44.5609
+prefix_masked,10.9877,-7.5899,-15.3886,-13.6322
+first_error_only,12.0737,-2.6087,1.8921,-1.8534
+cmdpo,10.7756,-3.6095,-8.0655,-6.7614
+```
+
+held-out likelihood delta：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+vanilla,-49.2262,-22.4351,-47.3644,-39.1815
+prefix_masked,6.4356,-4.5194,-26.8163,-14.0636
+first_error_only,5.5622,-0.5896,2.4202,0.0376
+cmdpo,5.7467,-1.2875,-14.4676,-6.3625
+```
+
+held-out 观察：
+
+- Vanilla DPO 再次严重压低正确前缀：`prefix_delta=-49.2262`。
+- CM-DPO 明显保护正确前缀：`prefix_delta=5.7467`。
+- First-error-only 保护前缀，但不处理错误后缀：`suffix_delta=2.4202`。
+- CM-DPO 相比 first-error-only 仍保留后缀惩罚：`suffix_delta=-14.4676`。
+- Prefix-masked 的 suffix 惩罚最强，但它不像 CM-DPO 那样区分 first-error 和后续 decay。
+
+当前最重要结论：
+
+```text
+Qwen2.5-0.5B held-out 上，CM-DPO 的核心机制证据成立：
+1. 相比 vanilla DPO，显著减少正确推理前缀伤害。
+2. 相比 first-error-only，保留对错误后缀的惩罚。
+3. 相比 prefix-masked，提供更细粒度的 causal decay 控制。
+```
+
+## 18. Held-out generation accuracy
+
+在 likelihood delta 之外，补充了真实生成准确率评估脚本：
+
+```text
+scripts/evaluate_generation_accuracy.py
+```
+
+评估设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+data: data/processed/api_math_pairs_60_confident_test.jsonl
+num_examples: 10
+decoding: greedy
+prompting: Qwen chat template
+max_new_tokens: 256
+```
+
+运行输出：
+
+```text
+outputs/qwen0_5b_api60_confident_heldout_generation_chat256_accuracy.jsonl
+outputs/qwen0_5b_api60_confident_heldout_generation_chat256_details.jsonl
+```
+
+结果：
+
+```text
+model,accuracy,correct,total
+base,1.0000,10,10
+vanilla,0.8000,8,10
+prefix_masked,1.0000,10,10
+first_error_only,1.0000,10,10
+cmdpo,1.0000,10,10
+```
+
+观察：
+
+- 10 条 held-out arithmetic 太简单，base model 已经达到 `10/10`。
+- Vanilla DPO 在这轮训练后掉到 `8/10`，说明全量惩罚 rejected response 可能伤害生成能力。
+- CM-DPO 保持 `10/10`，没有观察到 generation accuracy 退化。
+- Prefix-masked 和 first-error-only 在 accuracy 上也保持 `10/10`，所以当前 generation accuracy 不能区分三种 masked 方法。
+- 因此，本轮最强证据仍然来自 likelihood decomposition：CM-DPO 同时保护 prefix 并惩罚错误后缀；accuracy 结果主要说明 CM-DPO 没有像 vanilla 那样在这个小 held-out 上退化。
+
+## 19. Harder arithmetic held-out calibration
+
+上一节的 10 条 held-out 太简单，Qwen2.5-0.5B base 已经 `10/10`，因此无法用 generation accuracy 区分 masked variants。为此补充了模板生成的 harder arithmetic eval set：
+
+```text
+scripts/build_harder_math_eval.py
+data/processed/harder_math_eval_100.jsonl
+```
+
+生成命令：
+
+```bash
+python3 scripts/build_harder_math_eval.py \
+  --output data/processed/harder_math_eval_100.jsonl \
+  --limit 100 \
+  --seed 123
+```
+
+题型包含：
+
+```text
+inventory: 乘法 + 减法 + 加法
+tickets: 成人票 + 儿童票 - 优惠券 + 零食
+garden: 行列乘法 + 多日新增 - 损失
+classroom: 每人页数 + extra packets - recycled
+recipe: 批次数量 + 新购入 - 其他用途
+shipping: 箱数乘法 - 损坏 + 替换
+```
+
+使用 Qwen chat template + greedy decoding + `max_new_tokens=256` 评估 base model：
+
+```bash
+CUDA_VISIBLE_DEVICES=3 python3 scripts/evaluate_generation_accuracy.py \
+  --model /home/taozifu2025/models/Qwen2.5-0.5B-Instruct \
+  --data data/processed/harder_math_eval_100.jsonl \
+  --summary-output outputs/qwen0_5b_harder_math_eval_100_base_accuracy.jsonl \
+  --details-output outputs/qwen0_5b_harder_math_eval_100_base_details.jsonl \
+  --max-new-tokens 256 \
+  --use-chat-template
+```
+
+整体结果：
+
+```text
+model,accuracy,correct,total
+base,0.3600,36,100
+```
+
+按模板统计：
+
+```text
+classroom 5/17  0.294
+garden    14/17 0.824
+inventory 13/17 0.765
+recipe    0/16  0.000
+shipping  4/16  0.250
+tickets   0/17  0.000
+```
+
+结论：
+
+- `harder_math_eval_100` 难度合适，base accuracy 从简单 held-out 的 `100%` 降到 `36%`。
+- 这个 held-out 可以作为下一轮真实 generation accuracy 指标。
+- 当前不应再用简单 10 条 arithmetic held-out 判断 accuracy；它只适合 smoke test。
+- 下一步应生成 harder arithmetic 的 preference train set，并在 `harder_math_eval_100` 上比较 vanilla / prefix-masked / first-error-only / CM-DPO。
+
+## 20. Harder arithmetic preference training
+
+基于模板生成了更难的 preference train set：
+
+```text
+scripts/build_harder_math_pairs.py
+data/processed/harder_math_pairs_300.jsonl
+data/processed/variants_harder300/harder_math_pairs_300_vanilla.jsonl
+data/processed/variants_harder300/harder_math_pairs_300_prefix_masked.jsonl
+data/processed/variants_harder300/harder_math_pairs_300_first_error_only.jsonl
+data/processed/variants_harder300/harder_math_pairs_300_cmdpo.jsonl
+```
+
+数据质量：
+
+```text
+num_rows: 300
+chosen_correct: 300 / 300
+rejected_wrong: 300 / 300
+step_count_dist: {4: 250, 5: 50}
+first_error_dist: {1: 250, 0: 50}
+template_dist: uniform across 6 templates
+```
+
+训练设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+learning_rate: 1e-5
+epochs: 3
+max_length: 768
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+```
+
+训练输出：
+
+```text
+outputs/qwen0_5b_harder300_vanilla
+outputs/qwen0_5b_harder300_prefix_masked
+outputs/qwen0_5b_harder300_first_error_only
+outputs/qwen0_5b_harder300_cmdpo
+```
+
+训练损失：
+
+```text
+vanilla: 0.2484
+prefix_masked: 0.0562
+first_error_only: 0.0289
+cmdpo: 0.0346
+```
+
+在 `harder_math_eval_100.jsonl` 上做 Qwen chat template + greedy + `max_new_tokens=256` 的 batch generation accuracy：
+
+```text
+model,accuracy,correct,total
+base,0.3600,36,100
+vanilla,0.2600,26,100
+prefix_masked,0.4000,40,100
+first_error_only,0.4000,40,100
+cmdpo,0.3400,34,100
+```
+
+结论：
+
+- harder eval 终于把 base accuracy 压到了 `36%`，可用于真实比较。
+- vanilla 继续明显退化生成能力，掉到 `26%`。
+- prefix_masked 和 first_error_only 都能超过 base，到 `40%`。
+- 当前这组 harder 训练下，CM-DPO 是 `34%`，没有超过 base，但也没有像 vanilla 那样明显伤害生成能力。
+- 这说明更强或更长的训练可能还需要调参；至少现在已拿到一个可发表前的真实负结果，不再是简单 held-out 的幻觉。
+
+## 21. CM-DPO gamma sweep on harder300
+
+为了检查 CM-DPO 后缀 decay 强度的影响，固定 harder300 数据和 Qwen2.5-0.5B-Instruct LoRA 训练设置，只扫 `gamma`：
+
+```text
+gamma=0.25
+gamma=0.50
+gamma=0.75
+```
+
+训练数据：
+
+```text
+data/processed/variants_harder300_gamma025/harder_math_pairs_300_cmdpo.jsonl
+data/processed/variants_harder300/harder_math_pairs_300_cmdpo.jsonl
+data/processed/variants_harder300_gamma075/harder_math_pairs_300_cmdpo.jsonl
+```
+
+训练输出：
+
+```text
+outputs/qwen0_5b_harder300_cmdpo_gamma025
+outputs/qwen0_5b_harder300_cmdpo
+outputs/qwen0_5b_harder300_cmdpo_gamma075
+```
+
+训练损失：
+
+```text
+cmdpo_gamma025: 0.0308
+cmdpo_gamma05:  0.0346
+cmdpo_gamma075: 0.0430
+```
+
+在 `harder_math_eval_100.jsonl` 上做 Qwen chat template + greedy + `max_new_tokens=256` 的 batch generation accuracy：
+
+```text
+model,accuracy,correct,total
+base,0.3600,36,100
+cmdpo_gamma025,0.3900,39,100
+cmdpo_gamma05,0.3400,34,100
+cmdpo_gamma075,0.3700,37,100
+```
+
+在 `harder_math_pairs_300.jsonl` 训练集上做 likelihood decomposition：
+
+```text
+variant,prefix_delta,error_delta,suffix_delta,cmdpo_delta
+cmdpo_gamma025,35.0403,-13.8613,13.5324,-8.7979
+cmdpo_gamma05,35.0532,-15.6407,11.9028,-11.3736
+cmdpo_gamma075,35.0922,-16.8402,7.8997,-14.4158
+```
+
+结论：
+
+- `gamma=0.25` 的 held-out generation accuracy 最好，达到 `39/100`，高于 base 的 `36/100`。
+- `gamma=0.75` 也略高于 base，达到 `37/100`。
+- `gamma=0.5` 在这组 harder300 设置下仍低于 base，为 `34/100`。
+- likelihood 分解显示 gamma 越大，first-error suppression 越强：`error_delta` 从 `-13.8613` 到 `-16.8402`。
+- gamma 越大，combined CM-DPO 加权区域也压得越强：`cmdpo_delta` 从 `-8.7979` 到 `-14.4158`。
+- 但更强 suppression 没有直接转化为更高 generation accuracy；当前小模型/小数据下，`gamma=0.25` 是更合适的下一轮默认值。
+- 下一步应优先用 `gamma=0.25` 扩到 1000-2000 条 harder/GSM8K-style preference 数据，并保留 vanilla、prefix-masked、first-error-only 作为对照。
