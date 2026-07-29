@@ -1,0 +1,37 @@
+\section{Experiments}
+
+\subsection{Data}
+
+We run controlled arithmetic experiments designed to expose the partial-correctness failure mode. Each preference example contains a prompt, a correct step-by-step solution, and a rejected solution with exactly one localized arithmetic or state-transition error. The rejected solution is segmented into steps and assigned a first-error index. We use two held-out evaluation sets: a 100-example harder arithmetic set for rapid iteration and a 500-example harder arithmetic set for more stable generation evaluation.
+
+The main scaled setting uses 2,000 harder arithmetic preference pairs for training and evaluates on 500 held-out problems. The evaluation prompts use the same task family but are generated with a disjoint seed.
+
+\subsection{Model and Training}
+
+All reported model-training experiments use Qwen2.5-0.5B-Instruct as the base causal language model and train LoRA adapters. The reference model is the frozen base model. Unless otherwise stated, we use $\beta=0.1$, maximum sequence length 768, batch size 1, gradient accumulation 8, and one epoch for the harder2000 runs. For \cmdpo, we set $\gamma=0.25$ after a small gamma sweep.
+
+\begin{table}[t]
+\caption{Main harder2000 training configuration.}
+\label{tab:training-config}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Setting & Value \\
+\midrule
+Base model & Qwen2.5-0.5B-Instruct \\
+Adaptation & LoRA, rank 16, alpha 32, dropout 0.05 \\
+Preference objective & DPO-style policy-reference loss \\
+$\beta$ & 0.1 \\
+\cmdpo{} $\gamma$ & 0.25 \\
+Max length & 768 \\
+Epochs & 1 \\
+Batch / accumulation & 1 / 8 \\
+Seeds & 1, 2, 3 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Evaluation}
+
+We report exact final-answer accuracy under greedy decoding with the Qwen chat template and a maximum of 256 generated tokens. We also use likelihood decomposition probes during development: prefix likelihood retention, first-error suppression, and suffix behavior. These probes are useful for diagnosing whether an objective changes the intended part of the rejected trajectory, while generation accuracy measures end-task behavior.

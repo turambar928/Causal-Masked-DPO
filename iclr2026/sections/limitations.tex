@@ -1,0 +1,9 @@
+\section{Limitations}
+
+This is an initial draft based on controlled arithmetic experiments. The current evidence is not yet sufficient for a full ICLR claim. The most important limitation is benchmark scope: the results use synthetic harder arithmetic data rather than standard GSM8K or MATH evaluations. The setting is useful for mechanism testing because first errors are easy to localize, but it does not prove broad reasoning generalization.
+
+The second limitation is statistical strength. The three-seed harder2000 run shows \cmdpo as the best method on average, but its margin over first-error-only DPO is small. A stronger paper needs more seeds, larger held-out sets, and confidence intervals or paired significance tests.
+
+The third limitation is localization quality. These experiments use structured arithmetic construction and rule-based first-error information. In realistic chain-of-thought data, first-error localization may be noisy. Future experiments should evaluate robustness to localization noise and compare rule-based, rollout-based, and verifier-based localization.
+
+Finally, the current experiments use a 0.5B model with LoRA. Larger models and harder reasoning tasks may change both the magnitude and direction of the effects.

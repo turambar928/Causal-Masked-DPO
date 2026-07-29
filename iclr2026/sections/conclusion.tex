@@ -1,0 +1,5 @@
+\section{Conclusion}
+
+We introduced Causal-Masked DPO, a rejected-side weighting scheme for preference optimization in multi-step reasoning. \cmdpo targets a specific failure mode of vanilla DPO: over-penalizing correct prefixes inside rejected reasoning trajectories. By masking pre-error steps, fully penalizing the first error, and decaying later penalties, \cmdpo keeps the original DPO data format while injecting a simple causal credit-assignment assumption into the loss.
+
+Initial controlled experiments show that vanilla DPO can substantially harm arithmetic reasoning accuracy, while \cmdpo gives the best average held-out performance across three seeds. The result is promising but preliminary. The next step is to validate the same mechanism on GSM8K-style and standard reasoning benchmarks, with more seeds and stronger localization analyses.

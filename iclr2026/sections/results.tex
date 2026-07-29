@@ -1,0 +1,78 @@
+\section{Results}
+
+\subsection{Single-Seed Scaling}
+
+Table~\ref{tab:single-seed} summarizes the strongest single-seed held-out result from the harder2000 setting. Vanilla DPO substantially hurts generation accuracy, dropping from the base model's 41.0\% to 18.6\%. In contrast, \cmdpo reaches 49.0\%, outperforming prefix-masked DPO and first-error-only DPO.
+
+\begin{table}[t]
+\caption{Held-out harder arithmetic accuracy for the harder2000 single-seed run.}
+\label{tab:single-seed}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & Accuracy & Correct & Total \\
+\midrule
+Base & 0.410 & 205 & 500 \\
+Vanilla DPO & 0.186 & 93 & 500 \\
+Prefix-masked DPO & 0.360 & 180 & 500 \\
+First-error-only DPO & 0.440 & 220 & 500 \\
+\cmdpo{} & \textbf{0.490} & \textbf{245} & 500 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Likelihood decomposition in this setting is consistent with the proposed mechanism: vanilla DPO strongly suppresses correct prefixes, while masked variants preserve them. \cmdpo also applies more pressure to the first-error region than first-error-only in the measured decomposition, while retaining a decayed treatment of post-error suffix tokens.
+
+\subsection{Multi-Seed Replication}
+
+Because the single-seed margin could overstate the effect, we replicated harder2000 training with seeds 1, 2, and 3. Table~\ref{tab:multiseed-full} reports the full held-out generation results. Vanilla DPO is harmful in every seed. Prefix masking reduces the damage but remains below the base model. First-error-only and \cmdpo both improve over the base model on average.
+
+\begin{table}[t]
+\caption{Held-out harder arithmetic accuracy across three training seeds.}
+\label{tab:multiseed-full}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Model & Accuracy & Correct & Total \\
+\midrule
+Base & 0.410 & 205 & 500 \\
+Seed 1 vanilla & 0.238 & 119 & 500 \\
+Seed 1 prefix-masked & 0.382 & 191 & 500 \\
+Seed 1 first-error-only & 0.446 & 223 & 500 \\
+Seed 1 \cmdpo{} & \textbf{0.448} & \textbf{224} & 500 \\
+Seed 2 vanilla & 0.326 & 163 & 500 \\
+Seed 2 prefix-masked & 0.356 & 178 & 500 \\
+Seed 2 first-error-only & 0.408 & 204 & 500 \\
+Seed 2 \cmdpo{} & \textbf{0.428} & \textbf{214} & 500 \\
+Seed 3 vanilla & 0.196 & 98 & 500 \\
+Seed 3 prefix-masked & 0.356 & 178 & 500 \\
+Seed 3 first-error-only & \textbf{0.426} & \textbf{213} & 500 \\
+Seed 3 \cmdpo{} & 0.424 & 212 & 500 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table}[t]
+\caption{Mean held-out accuracy across seeds. Standard deviation is population standard deviation over three seeds.}
+\label{tab:multiseed-agg}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Variant & Mean accuracy & Std. \\
+\midrule
+Vanilla DPO & 0.253 & 0.054 \\
+Prefix-masked DPO & 0.365 & 0.012 \\
+First-error-only DPO & 0.427 & 0.016 \\
+\cmdpo{} & \textbf{0.433} & 0.011 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Table~\ref{tab:multiseed-agg} shows that \cmdpo is directionally strongest on average, but the margin over first-error-only is only 0.67 percentage points. This is an important qualification: current generation-accuracy evidence strongly rejects vanilla DPO in this setting, supports causal masking over uniform rejected penalties, but does not yet establish a large advantage of suffix decay over first-error-only training.
+
+\subsection{Interpretation}
+
+The experiments support three preliminary conclusions. First, full rejected-trajectory penalization is a poor fit for partially correct reasoning traces: vanilla DPO repeatedly degrades generation accuracy. Second, protecting the correct prefix is necessary but insufficient; prefix-masked DPO is consistently better than vanilla but still below the base model in the three-seed run. Third, \cmdpo gives the best average result, suggesting that decayed post-error penalty may help, but the current margin requires larger evaluations and more realistic reasoning benchmarks.

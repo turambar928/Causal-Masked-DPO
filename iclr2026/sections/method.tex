@@ -1,0 +1,88 @@
+\section{Method}
+
+\subsection{Setup}
+
+Given a prompt $x$, standard DPO training data contains a preferred response $\yw$ and a rejected response $\yl$. For reasoning tasks, we assume the rejected response can be segmented into $K$ steps:
+\begin{equation}
+\yl = (s_1, s_2, \ldots, s_K).
+\end{equation}
+We also assume an estimated first-error index $m$, where $s_{<m}$ is a correct or useful prefix, $s_m$ is the first step that causes the solution to fail, and $s_{>m}$ follows from the erroneous state.
+
+\subsection{Vanilla DPO}
+
+DPO defines an implicit reward as the policy-reference log-likelihood ratio:
+\begin{equation}
+r_\theta(y \mid x)
+= \log \policy(y \mid x) - \log \refpol(y \mid x).
+\end{equation}
+The vanilla DPO loss is
+\begin{equation}
+\mathcal{L}_{\mathrm{DPO}}(\theta)
+=
+- \mathbb{E}
+\left[
+\log \sigma
+\left(
+\beta
+\left(
+r_\theta(\yw \mid x)
+-
+r_\theta(\yl \mid x)
+\right)
+\right)
+\right].
+\end{equation}
+This objective penalizes every token in $\yl$ uniformly through the rejected reward term.
+
+\subsection{Causal Rejected-Side Weights}
+
+\cmdpo introduces step-level weights for the rejected response:
+\begin{equation}
+w_k =
+\begin{cases}
+0, & k < m, \\
+1, & k = m, \\
+\gamma^{k-m}, & k > m,
+\end{cases}
+\end{equation}
+where $\gamma \in [0,1]$ controls how strongly later post-error steps are penalized. The weighted rejected reward is
+\begin{equation}
+r_\theta^{\mathrm{CM}}(\yl \mid x)
+=
+\sum_{k=1}^{K}
+w_k
+\left[
+\log \policy(s_k \mid x, s_{<k})
+-
+\log \refpol(s_k \mid x, s_{<k})
+\right].
+\end{equation}
+The \cmdpo loss is
+\begin{equation}
+\mathcal{L}_{\mathrm{CM-DPO}}(\theta)
+=
+- \mathbb{E}
+\left[
+\log \sigma
+\left(
+\beta
+\left(
+r_\theta(\yw \mid x)
+-
+r_\theta^{\mathrm{CM}}(\yl \mid x)
+\right)
+\right)
+\right].
+\end{equation}
+
+\subsection{Baselines as Weight Patterns}
+
+The same implementation can express several baselines by changing $w_k$:
+\begin{itemize}
+    \item \textbf{Vanilla DPO:} $w_k=1$ for all rejected steps.
+    \item \textbf{Prefix-masked DPO:} $w_k=0$ for $k<m$ and $w_k=1$ for $k \ge m$.
+    \item \textbf{First-error-only DPO:} $w_m=1$ and $w_k=0$ for all $k \ne m$.
+    \item \textbf{\cmdpo:} prefix mask, full first-error penalty, and exponential suffix decay.
+\end{itemize}
+
+In implementation, step weights are expanded to token weights using tokenizer offset mappings. Chosen responses keep full response masks, while rejected response masks carry the causal weights.

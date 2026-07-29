@@ -1,0 +1,18 @@
+\section{Introduction}
+
+Preference optimization has become a standard tool for aligning language models with human or automated judgments. Direct Preference Optimization (DPO) \citep{rafailov2023direct} is especially attractive because it avoids explicit reward-model training and directly optimizes preferred responses over rejected ones. Yet the standard trajectory-level formulation has a structural weakness for multi-step reasoning: a response can be rejected because of one local error even when many earlier steps are correct.
+
+Consider a chain-of-thought arithmetic solution that correctly parses the problem, sets up the right equation, and then makes one arithmetic mistake. Standard DPO treats the whole rejected response as negative evidence. This can reduce the likelihood of the correct prefix together with the actual error. For reasoning tasks, such over-penalty is undesirable: it punishes the very intermediate behavior that the model should retain.
+
+We propose Causal-Masked DPO (\cmdpo), a simple modification of DPO for multi-step reasoning. The key idea is to estimate the first error in the rejected reasoning trajectory and use this causal structure when aggregating the rejected log-likelihood term. Steps before the first error receive zero rejected-side penalty, the first error receives full penalty, and later steps receive exponentially decayed penalty. The preferred response remains unchanged.
+
+\cmdpo is designed to preserve the practical advantages of DPO. It uses the same preference tuple $(x,\yw,\yl)$, does not require constructing local step-level preference pairs, and can be implemented as token weights in an ordinary causal language-model training pipeline. The method only assumes a step segmentation and an estimated first-error index, which can come from rule-based verification, rollout success rates, execution feedback, or a process verifier.
+
+This draft reports controlled arithmetic experiments rather than a complete benchmark study. The goal is to test the core mechanism before scaling: does causal masking reduce damage to correct reasoning prefixes, and does it avoid the generation degradation observed with vanilla DPO? On synthetic harder arithmetic preference data, vanilla DPO consistently reduces held-out accuracy below the base model. \cmdpo improves over vanilla and prefix-masked baselines, and is directionally strongest across three seeds, though its average margin over a first-error-only baseline is small.
+
+Our contributions are:
+\begin{itemize}
+    \item We identify trajectory-level over-penalty as a concrete failure mode of DPO for partially correct rejected reasoning.
+    \item We introduce \cmdpo, a rejected-side causal weighting scheme that protects correct prefixes while retaining pressure on the first erroneous step and its consequences.
+    \item We provide an implementation with token-level masks and report controlled experiments showing that \cmdpo avoids the severe degradation caused by vanilla DPO in harder arithmetic preference training.
+\end{itemize}

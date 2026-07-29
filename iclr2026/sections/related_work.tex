@@ -1,0 +1,10 @@
+\section{Related Work}
+
+\paragraph{Preference optimization.}
+Reinforcement learning from human feedback aligns language models by fitting a reward model and optimizing against it \citep{ouyang2022training}. DPO \citep{rafailov2023direct} simplifies this pipeline by directly optimizing the policy on preference pairs using a closed-form connection between rewards and policy likelihood ratios. \cmdpo keeps this trajectory-level preference-pair interface, but changes how the rejected response contributes to the DPO objective.
+
+\paragraph{Reasoning supervision.}
+Mathematical reasoning benchmarks such as GSM8K \citep{cobbe2021training} and MATH \citep{hendrycks2021measuring} highlight the need for models to perform coherent multi-step computation. Process supervision and step-level verification aim to score intermediate reasoning steps rather than only final answers \citep{lightman2023lets}. \cmdpo is complementary to these approaches: it can use a verifier to locate the first error, but it does not require training a process reward model or replacing trajectory-level preference data with step-level preference pairs.
+
+\paragraph{Parameter-efficient adaptation.}
+Our experiments use LoRA \citep{hu2022lora} to make repeated preference-optimization runs feasible on a small causal language model. The proposed objective is independent of LoRA and can be used with full fine-tuning, LoRA, or other parameter-efficient adaptation methods.
