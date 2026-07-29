@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, set_seed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -29,7 +29,10 @@ def main() -> None:
     parser.add_argument("--per-device-train-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=16)
     parser.add_argument("--use-lora", action="store_true")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+
+    set_seed(args.seed)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token is None:
@@ -76,6 +79,8 @@ def main() -> None:
         save_steps=500,
         bf16=use_bf16,
         fp16=use_fp16,
+        seed=args.seed,
+        data_seed=args.seed,
         remove_unused_columns=False,
         report_to=[],
     )

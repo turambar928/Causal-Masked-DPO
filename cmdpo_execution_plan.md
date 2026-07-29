@@ -1596,3 +1596,72 @@ cmdpo_gamma025,0.4900,245,500
 - Vanilla DPO 的伤害在 500 题上更稳定：harder1000 vanilla `26.2%`，harder2000 vanilla `18.6%`。
 - 这轮结果比 eval100 更支持当前主张：CM-DPO 的优势不是单个小评估集上的偶然波动，而是在更大的 synthetic harder arithmetic held-out 上持续成立。
 - 下一步应做多 seed 复现实验，建议先固定 harder2000 + `gamma=0.25`，跑 `seed=1,2,3`，然后再把数据构造迁移到 GSM8K-style。
+
+## 25. Harder2000 gamma=0.25 multi-seed eval500
+
+为了检查 harder2000 + `gamma=0.25` 的结果是否依赖单个随机种子，给 `scripts/train_cmdpo.py` 增加了 `--seed` 参数，并把 `TrainingArguments.seed` / `data_seed` 一起固定。随后在 `seed=1,2,3` 上分别训练四个 adapter：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+data_dir: data/processed/variants_harder2000_gamma025/
+variants: vanilla, prefix_masked, first_error_only, cmdpo
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 1
+max_length: 768
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+seeds: 1, 2, 3
+```
+
+训练损失：
+
+```text
+seed,vanilla,prefix_masked,first_error_only,cmdpo
+1,0.1482,0.0370,0.0223,0.0233
+2,0.1549,0.0379,0.0232,0.0245
+3,0.1585,0.0364,0.0230,0.0243
+```
+
+500 题 held-out generation accuracy：
+
+```text
+summary: outputs/qwen0_5b_harder2000_gamma025_multiseed_eval500_accuracy.jsonl
+details: outputs/qwen0_5b_harder2000_gamma025_multiseed_eval500_details.jsonl
+
+model,accuracy,correct,total
+base,0.4100,205,500
+seed1_vanilla,0.2380,119,500
+seed1_prefix_masked,0.3820,191,500
+seed1_first_error_only,0.4460,223,500
+seed1_cmdpo,0.4480,224,500
+seed2_vanilla,0.3260,163,500
+seed2_prefix_masked,0.3560,178,500
+seed2_first_error_only,0.4080,204,500
+seed2_cmdpo,0.4280,214,500
+seed3_vanilla,0.1960,98,500
+seed3_prefix_masked,0.3560,178,500
+seed3_first_error_only,0.4260,213,500
+seed3_cmdpo,0.4240,212,500
+```
+
+按 variant 聚合：
+
+```text
+variant,mean_accuracy,std,seed_values
+vanilla,0.2533,0.0542,"0.2380,0.3260,0.1960"
+prefix_masked,0.3647,0.0123,"0.3820,0.3560,0.3560"
+first_error_only,0.4267,0.0155,"0.4460,0.4080,0.4260"
+cmdpo,0.4333,0.0105,"0.4480,0.4280,0.4240"
+```
+
+结论：
+
+- 多 seed 后，CM-DPO 仍然是平均 accuracy 最高的方法：`43.33%`。
+- Vanilla DPO 三个 seed 都显著低于 base `41.0%`，平均只有 `25.33%`，说明普通 DPO 在这批 reasoning preference 上稳定有害。
+- Prefix-masked 平均 `36.47%`，比 vanilla 好，但仍低于 base。
+- First-error-only 平均 `42.67%`，也高于 base；CM-DPO 平均只高 `0.67` 个百分点，优势很小。
+- seed3 中 first-error-only 是 `213/500`，CM-DPO 是 `212/500`，所以不能把 CM-DPO 对 first-error-only 的优势表述成强结论。
+- 当前更稳妥的表述是：CM-DPO 在 harder2000 + eval500 的三 seed 实验中方向性最好、方差更小，但相对 first-error-only 的 generation accuracy margin 较窄，需要更大的 held-out eval、更多 seed 和 GSM8K-style 验证。
