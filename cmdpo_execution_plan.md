@@ -1665,3 +1665,106 @@ cmdpo,0.4333,0.0105,"0.4480,0.4280,0.4240"
 - First-error-only 平均 `42.67%`，也高于 base；CM-DPO 平均只高 `0.67` 个百分点，优势很小。
 - seed3 中 first-error-only 是 `213/500`，CM-DPO 是 `212/500`，所以不能把 CM-DPO 对 first-error-only 的优势表述成强结论。
 - 当前更稳妥的表述是：CM-DPO 在 harder2000 + eval500 的三 seed 实验中方向性最好、方差更小，但相对 first-error-only 的 generation accuracy margin 较窄，需要更大的 held-out eval、更多 seed 和 GSM8K-style 验证。
+
+## 26. GSM8K-style smoke experiment
+
+补齐了 GSM8K-style 数据和评估链路：
+
+```text
+scripts/build_gsm8k_pairs.py
+- added --seed
+- added --use-chat-template
+- added --local-files-only
+- switched dtype selection to bf16-if-supported else fp16 on CUDA
+- made the generation prompt more structured: 3-6 numbered steps, explicit arithmetic, final "#### <answer>"
+
+scripts/build_gsm8k_eval.py
+- new helper for building held-out GSM8K eval jsonl
+```
+
+由于服务器不能直连 Hugging Face，需要继续使用镜像：
+
+```text
+HF_ENDPOINT=https://hf-mirror.com
+HF_HUB_DISABLE_XET=1
+```
+
+生成的数据：
+
+```text
+data/processed/gsm8k_small/gsm8k_eval_100.jsonl
+data/processed/gsm8k_small/gsm8k_pairs_50_structured.jsonl
+data/processed/gsm8k_small/gsm8k_pairs_50_structured_localized.jsonl
+data/processed/gsm8k_small/variants_gamma025/gsm8k_pairs_49_structured_{vanilla,prefix_masked,first_error_only,cmdpo}.jsonl
+```
+
+Preference 数据统计：
+
+```text
+raw GSM8K prompts attempted: 50
+usable preference pairs: 49
+sampled correct chosen: 26
+gold fallback chosen: 23
+avg rejected chars: 668.1
+```
+
+Localization 诊断：
+
+```text
+rows: 49
+step_count_dist: {11: 7, 14: 7, 12: 6, 10: 6, 9: 6, 13: 5, 15: 3, 8: 2, 6: 2, 5: 2, 16: 1, 18: 1, 7: 1}
+not_last_first_error: 1 / 49
+confidence_dist: {0.8: 38, 1.0: 11}
+```
+
+这说明当前 cheap localizer 在 GSM8K-style 生成文本上几乎总把 first-error 放到最后一步。这个定位质量不足以验证 CM-DPO 的 suffix decay 机制，因为 CM-DPO 会退化得很接近 first-error-only。
+
+训练设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 3
+max_length: 1024
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+seed: 42
+```
+
+训练损失：
+
+```text
+vanilla: 0.5219
+prefix_masked: 0.3424
+first_error_only: 0.3465
+cmdpo: 0.3447
+```
+
+在 `gsm8k_eval_100.jsonl` 上做 Qwen chat template + greedy + `max_new_tokens=256` 的 generation accuracy：
+
+```text
+summary: outputs/gsm8k_small_eval100_accuracy.jsonl
+details: outputs/gsm8k_small_eval100_details.jsonl
+
+model,accuracy,correct,total
+base,0.1600,16,100
+vanilla,0.1900,19,100
+prefix_masked,0.2200,22,100
+first_error_only,0.2100,21,100
+cmdpo,0.2000,20,100
+```
+
+结论：
+
+- GSM8K-style 训练和评估链路已经跑通。
+- 这轮不是 CM-DPO 的正面主结果：prefix-masked 最好，CM-DPO 低于 first-error-only 和 prefix-masked。
+- 和 harder arithmetic 不同，vanilla 没有明显伤害，反而从 `16/100` 到 `19/100`，说明 49 条 GSM8K-style 小样本更像 task adaptation smoke，而不是可靠 preference-alignment 结论。
+- 当前主要瓶颈是 first-error localization：`48/49` 条样本的 first-error 在最后一步，使 CM-DPO 的 causal decay 基本无法发挥作用。
+- 下一步不应直接扩大训练，而应先改进 GSM8K first-error localization。可选路线：
+  - 用 rollout-based localization 处理 100-200 条高质量样本；
+  - 用 API judge 标注 first-error step；
+  - 构造 verifier-friendly 的 GSM8K-style rejected trajectories，使错误发生在明确中间步骤；
+  - 过滤掉 first-error 在最后一步的样本，只保留可检验 suffix decay 的样本。

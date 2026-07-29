@@ -9,7 +9,7 @@ from typing import Any
 import torch
 from datasets import load_dataset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -25,8 +25,17 @@ def generate_responses(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
+    use_chat_template: bool,
 ) -> list[str]:
-    encoded = tokenizer(prompt, return_tensors="pt").to(model.device)
+    if use_chat_template and hasattr(tokenizer, "apply_chat_template"):
+        encoded = tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(model.device)
+    else:
+        encoded = tokenizer(prompt, return_tensors="pt").to(model.device)
     outputs = model.generate(
         **encoded,
         do_sample=True,
@@ -50,16 +59,27 @@ def main() -> None:
     parser.add_argument("--max-new-tokens", type=int, default=512)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=0.95)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--use-chat-template", action="store_true")
+    parser.add_argument("--local-files-only", action="store_true")
     args = parser.parse_args()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    set_seed(args.seed)
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model,
+        local_files_only=args.local_files_only,
+        trust_remote_code=True,
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    dtype = torch.bfloat16 if use_bf16 else (torch.float16 if torch.cuda.is_available() else torch.float32)
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         torch_dtype=dtype,
         device_map="auto" if torch.cuda.is_available() else None,
+        local_files_only=args.local_files_only,
         trust_remote_code=True,
     )
     model.eval()
@@ -69,7 +89,12 @@ def main() -> None:
     for idx, item in enumerate(tqdm(dataset.select(range(min(args.limit, len(dataset)))))):
         question = item["question"]
         answer = item["answer"]
-        prompt = f"Question: {question}\nAnswer step by step, and end with the final answer."
+        prompt = (
+            f"Question: {question}\n"
+            "Answer with 3 to 6 numbered steps. "
+            "Make each step short and include any arithmetic explicitly. "
+            "End with a final line in the form '#### <answer>'."
+        )
         candidates = generate_responses(
             model,
             tokenizer,
@@ -78,6 +103,7 @@ def main() -> None:
             args.max_new_tokens,
             args.temperature,
             args.top_p,
+            args.use_chat_template,
         )
         correct = [c for c in candidates if verify_answer(c, answer)]
         incorrect = [c for c in candidates if not verify_answer(c, answer)]
