@@ -1869,3 +1869,116 @@ cmdpo,0.2000,20,100
   - judge 标成最后一步；
   - confidence 低于 0.9；
   - chosen 使用 gold fallback 且风格和 rejected 差异过大的样本。
+
+## 28. GSM8K API-judge 200-scale filtering
+
+按上一节计划，新增高质量样本过滤脚本：
+
+```text
+scripts/filter_gsm8k_preferences.py
+```
+
+过滤条件：
+
+```text
+confidence >= 0.9
+first_error_step is not the last step
+drop visibly truncated rejected responses
+sampled chosen is preferred but not required
+```
+
+先对 49 条 API-judge 数据做严格过滤，如果要求 `has_sampled_chosen=true`，只剩：
+
+```text
+strict kept: 9 / 49
+```
+
+因此扩展到 200 条 GSM8K prompts：
+
+```text
+data/processed/gsm8k_small/gsm8k_pairs_200_structured.jsonl
+attempted prompts: 200
+usable preference pairs: 199
+```
+
+API judge 标注：
+
+```text
+data/processed/gsm8k_small/gsm8k_pairs_199_structured_api_judge_gamma025.jsonl
+rows: 199
+parse_failures: 0
+not_last_first_error: 121 / 199 = 60.8%
+confidence>=0.9: 196 / 199
+```
+
+严格过滤后仍不足 50：
+
+```text
+require sampled chosen: 34 / 199
+```
+
+放宽 sampled-chosen 为 preferred-but-not-required 后，得到高质量训练集：
+
+```text
+data/processed/gsm8k_small/gsm8k_pairs_199_api_judge_filtered_hq.jsonl
+kept: 109 / 199
+sampled_chosen: 34
+gold_fallback_chosen: 75
+not_last_first_error: 109 / 109
+first_error_dist: {0: 1, 1: 23, 2: 11, 3: 13, 4: 9, 5: 9, 6: 11, 7: 10, 8: 7, 9: 3, 10: 4, 11: 3, 12: 4, 14: 1}
+```
+
+派生权重版本：
+
+```text
+data/processed/gsm8k_small/variants_api_judge_hq_gamma025/gsm8k_pairs_109_api_judge_hq_{vanilla,prefix_masked,first_error_only,cmdpo}.jsonl
+```
+
+训练设置：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 3
+max_length: 1024
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+seed: 42
+```
+
+训练损失：
+
+```text
+vanilla: 0.3117
+prefix_masked: 0.2193
+first_error_only: 0.2053
+cmdpo: 0.2072
+```
+
+GSM8K eval100：
+
+```text
+summary: outputs/gsm8k_api_judge_hq_eval100_accuracy.jsonl
+details: outputs/gsm8k_api_judge_hq_eval100_details.jsonl
+
+model,accuracy,correct,total
+base,0.1600,16,100
+vanilla,0.2500,25,100
+prefix_masked,0.2900,29,100
+first_error_only,0.2800,28,100
+cmdpo,0.2800,28,100
+```
+
+结论：
+
+- API judge + filtering 后，GSM8K-style 数据质量明显提高，所有训练变体都高于 base。
+- 但 CM-DPO 仍不是最好：prefix-masked `29/100`，first-error-only `28/100`，CM-DPO `28/100`。
+- 当前 GSM8K 小规模结果支持“prefix protection 很重要”，但不支持“suffix decay 在 GSM8K 上带来额外收益”。
+- 一个可能原因是 109 条过滤数据中有 75 条 chosen 是 gold fallback，chosen/rejected 风格不匹配；这更像 task adaptation，而不是干净 preference learning。
+- 下一步如果继续 GSM8K，应先提高 sampled-correct chosen 比例，而不是继续扩大 gold-fallback 数据：
+  - 增加 `num_candidates` 到 8 或 16；
+  - 降低 sampling temperature，提高 sampled correct 率；
+  - 或使用 API 生成风格匹配的 chosen solution。
