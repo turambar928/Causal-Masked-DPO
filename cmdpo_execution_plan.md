@@ -1768,3 +1768,104 @@ cmdpo,0.2000,20,100
   - 用 API judge 标注 first-error step；
   - 构造 verifier-friendly 的 GSM8K-style rejected trajectories，使错误发生在明确中间步骤；
   - 过滤掉 first-error 在最后一步的样本，只保留可检验 suffix decay 的样本。
+
+## 27. GSM8K API-judge first-error localization
+
+按上一节结论，新增 direct API judge localizer：
+
+```text
+scripts/localize_errors_api_judge.py
+```
+
+这个脚本不做 rollout continuation，而是直接让 API judge 对 rejected solution 的分步文本和 gold answer 做比较，输出：
+
+```text
+first_error_step
+confidence
+rationale
+step_weights
+```
+
+标注输入：
+
+```text
+data/processed/gsm8k_small/gsm8k_pairs_50_structured.jsonl
+```
+
+标注输出：
+
+```text
+data/processed/gsm8k_small/gsm8k_pairs_49_structured_api_judge_gamma025.jsonl
+```
+
+定位质量：
+
+```text
+rows: 49
+parse_failures: 1
+not_last_first_error: 26 / 49 = 53.1%
+first_error_dist: {0: 1, 1: 2, 2: 3, 3: 4, 4: 6, 5: 3, 6: 2, 7: 4, 8: 4, 9: 7, 10: 1, 11: 2, 12: 3, 13: 7}
+confidence_dist: {0.0: 1, 0.79: 1, 0.89: 1, 0.9: 1, 0.92: 1, 0.95: 1, 0.96: 3, 0.97: 1, 0.98: 11, 0.99: 28}
+```
+
+这达到了上一节设置的最低门槛：
+
+```text
+not_last_first_error >= 50%
+```
+
+派生权重版本：
+
+```text
+data/processed/gsm8k_small/variants_api_judge_gamma025/gsm8k_pairs_49_api_judge_{vanilla,prefix_masked,first_error_only,cmdpo}.jsonl
+```
+
+训练设置和上一节保持一致：
+
+```text
+model: /home/taozifu2025/models/Qwen2.5-0.5B-Instruct
+LoRA: r=16, alpha=32, dropout=0.05
+beta: 0.1
+gamma: 0.25
+learning_rate: 1e-5
+epochs: 3
+max_length: 1024
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+seed: 42
+```
+
+训练损失：
+
+```text
+vanilla: 0.5217
+prefix_masked: 0.3586
+first_error_only: 0.3519
+cmdpo: 0.3504
+```
+
+在同一份 `gsm8k_eval_100.jsonl` 上评估：
+
+```text
+summary: outputs/gsm8k_api_judge_eval100_accuracy.jsonl
+details: outputs/gsm8k_api_judge_eval100_details.jsonl
+
+model,accuracy,correct,total
+base,0.1600,16,100
+vanilla,0.1800,18,100
+prefix_masked,0.2500,25,100
+first_error_only,0.2300,23,100
+cmdpo,0.2000,20,100
+```
+
+结论：
+
+- API judge 明显改善了 GSM8K first-error localization：`not_last_first_error` 从 cheap localizer 的 `1/49` 提升到 `26/49`。
+- 但 generation accuracy 上，CM-DPO 仍然不是最好：prefix-masked `25/100`，first-error-only `23/100`，CM-DPO `20/100`。
+- 这说明当前 GSM8K-style 小样本的瓶颈已经从“完全无法定位中间错误”转移到“数据规模和 rejected trajectory 质量不足以支持 CM-DPO suffix decay 优势”。
+- 当前不应把 GSM8K 结果写成支持 CM-DPO 的主证据；论文中应继续把 harder arithmetic 作为机制证据，把 GSM8K 写成迁移中的负/混合结果。
+- 下一步如果继续 GSM8K，应优先扩大 API-judge 样本到 200 条，并过滤低质量 rejected：
+  - rejected 过早截断；
+  - judge 标成最后一步；
+  - confidence 低于 0.9；
+  - chosen 使用 gold fallback 且风格和 rejected 差异过大的样本。

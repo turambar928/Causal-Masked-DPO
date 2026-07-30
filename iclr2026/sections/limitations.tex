@@ -6,6 +6,6 @@ The second limitation is statistical strength. The three-seed harder2000 run sho
 
 The third limitation is localization quality. These experiments use structured arithmetic construction and rule-based first-error information. In realistic chain-of-thought data, first-error localization may be noisy. Future experiments should evaluate robustness to localization noise and compare rule-based, rollout-based, and verifier-based localization.
 
-An initial GSM8K-style smoke experiment reinforces this point. The training and evaluation pipeline runs end-to-end, but a cheap localizer places the first error at the final step for almost all generated rejected solutions. In that regime, \cmdpo cannot meaningfully test suffix decay because it degenerates toward first-error-only masking. We therefore treat GSM8K-style validation as pending better first-error localization rather than as completed evidence.
+Initial GSM8K-style smoke experiments reinforce this point. The training and evaluation pipeline runs end-to-end, and an API judge improves first-error localization over a cheap heuristic. However, the resulting 49-example pilot still does not support a positive \cmdpo{} claim: prefix-masked DPO performs best on a 100-example GSM8K evaluation, while \cmdpo{} trails first-error-only. We therefore treat GSM8K-style validation as pending larger, cleaner preference data rather than as completed evidence.
 
 Finally, the current experiments use a 0.5B model with LoRA. Larger models and harder reasoning tasks may change both the magnitude and direction of the effects.
