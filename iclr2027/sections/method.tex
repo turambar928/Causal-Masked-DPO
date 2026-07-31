@@ -1,0 +1,63 @@
+\section{Method}
+
+\subsection{DPO and rejected-side over-penalty}
+
+For a prompt $x$, DPO uses a preferred response $\yw$ and rejected response $\yl$. Its implicit reward is
+\begin{equation}
+r_\theta(y \mid x) =
+\log \policy(y \mid x) - \log \refpol(y \mid x),
+\end{equation}
+and the loss is
+\begin{equation}
+\mathcal{L}_{\mathrm{DPO}}(\theta)
+=
+-\mathbb{E}\left[
+\log \sigma\left(
+\beta \left(r_\theta(\yw \mid x)-r_\theta(\yl \mid x)\right)
+\right)
+\right].
+\end{equation}
+When $\yl$ is a multi-step reasoning trace, this objective penalizes all rejected tokens even if some earlier steps are correct.
+
+\subsection{Causal step weights}
+
+Let the rejected response be segmented into steps
+\begin{equation}
+\yl = (s_1,\ldots,s_K),
+\end{equation}
+and let $m$ be the estimated first-error index. A causal rejected-side mask assigns each rejected step a weight $w_k$. The preferred response remains fully weighted. The weighted rejected reward is
+\begin{equation}
+r_\theta^w(\yl \mid x)
+=
+\sum_{k=1}^{K} w_k
+\left[
+\log \policy(s_k \mid x,s_{<k})
+-
+\log \refpol(s_k \mid x,s_{<k})
+\right].
+\end{equation}
+The masked DPO loss is
+\begin{equation}
+\mathcal{L}_{w\mathrm{-DPO}}(\theta)
+=
+-\mathbb{E}\left[
+\log \sigma\left(
+\beta \left(r_\theta(\yw \mid x)-r_\theta^w(\yl \mid x)\right)
+\right)
+\right].
+\end{equation}
+
+\subsection{Variants}
+
+The experiments compare four weight patterns:
+\begin{itemize}
+    \item \textbf{Vanilla DPO:} $w_k=1$ for all rejected steps.
+    \item \textbf{Prefix-masked DPO:} $w_k=0$ for $k<m$ and $w_k=1$ for $k \ge m$.
+    \item \textbf{First-error-only DPO:} $w_m=1$ and $w_k=0$ for $k \ne m$.
+    \item \textbf{\cmdpo:} $w_k=0$ for $k<m$, $w_m=1$, and $w_k=\gamma^{k-m}$ for $k>m$.
+\end{itemize}
+\cmdpo{} therefore adds suffix decay to the robust prefix-protection idea. This distinction matters empirically: the prefix mask is consistently useful, while the extra decay design is not always better than simpler alternatives.
+
+\subsection{Implementation}
+
+Step-level weights are expanded to token-level response masks using tokenizer offset mappings. The DPO trainer then computes sequence log-likelihoods with the response masks applied. The reference model is frozen, and all reported model updates use LoRA adapters.

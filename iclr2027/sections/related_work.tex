@@ -1,0 +1,10 @@
+\section{Related Work}
+
+\paragraph{Preference optimization.}
+Reinforcement learning from human feedback aligns language models by learning a reward model and optimizing against it \citep{ouyang2022training}. DPO \citep{rafailov2023direct} removes the explicit reward-model stage and directly optimizes preference pairs through policy-reference likelihood ratios. Our work keeps DPO's trajectory-level data interface, but modifies how rejected trajectories contribute to the objective.
+
+\paragraph{Reasoning supervision.}
+Benchmarks such as GSM8K \citep{cobbe2021training} and MATH \citep{hendrycks2021measuring} emphasize multi-step mathematical reasoning. Process supervision and step-level verification aim to supervise intermediate reasoning rather than only final answers \citep{lightman2023lets}. Causal rejected-side masking is complementary: it can consume first-error signals from verifiers or judges, but does not require transforming the data into explicit step-level preference pairs.
+
+\paragraph{Parameter-efficient adaptation.}
+Our experiments use LoRA \citep{hu2022lora} to make repeated preference-optimization comparisons feasible. The masking objective is independent of LoRA and can also be used with full fine-tuning.

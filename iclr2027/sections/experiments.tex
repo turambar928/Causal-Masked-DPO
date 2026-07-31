@@ -1,0 +1,13 @@
+\section{Experiments}
+
+\subsection{Controlled harder arithmetic}
+
+The main mechanism experiments use synthetic harder arithmetic preference pairs. Each example contains a prompt, a correct step-by-step solution, and a rejected solution with a localized arithmetic or state-transition error. This setting gives high-quality first-error labels and directly tests whether rejected-side masking protects correct prefixes.
+
+We train Qwen2.5-0.5B-Instruct with LoRA adapters. The key scaled setting uses 2,000 preference pairs, $\gamma=0.25$, one epoch, $\beta=0.1$, maximum length 768, batch size 1, and gradient accumulation 8. We evaluate on 500 held-out harder arithmetic problems.
+
+\subsection{GSM8K-style pilots}
+
+We also run GSM8K-style pilots to test transfer beyond controlled templates. We generate preference pairs from GSM8K prompts using the base model, select sampled correct responses when available, and otherwise fall back to the gold answer. Rejected solutions are localized using an API judge that returns the first erroneous step and confidence. We filter examples by confidence, non-final first-error position, and truncation heuristics.
+
+The GSM8K pilots are intentionally treated as diagnostic rather than final benchmark evidence. They reveal whether the same masking idea survives noisier generated reasoning, but they also expose data-quality issues such as gold-fallback chosen responses and style mismatch.

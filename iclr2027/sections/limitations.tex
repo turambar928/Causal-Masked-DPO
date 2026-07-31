@@ -1,0 +1,9 @@
+\section{Limitations}
+
+The current evidence is preliminary. The strongest positive results come from controlled harder arithmetic, where first-error labels are cleaner than in open-ended model generations. This makes the mechanism easy to test but does not prove broad reasoning generalization.
+
+The GSM8K pilots are intentionally reported as mixed evidence. They show that the pipeline runs end-to-end and that prefix protection helps, but they do not show a reliable suffix-decay benefit. Many high-quality filtered examples still use gold-fallback chosen responses, creating a style mismatch with model-generated rejected responses.
+
+The current experiments also use Qwen2.5-0.5B-Instruct with LoRA. Larger models, stronger sampled solution generators, and better first-error judges may change the balance between prefix-masked, first-error-only, and \cmdpo{} objectives.
+
+Finally, the paper does not yet include standard full-scale GSM8K or MATH evaluations. Those should be added only after the preference data construction yields enough style-matched sampled-correct chosen responses.

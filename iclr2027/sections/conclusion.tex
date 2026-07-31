@@ -1,0 +1,3 @@
+\section{Conclusion}
+
+We studied causal rejected-side masking for reasoning preference optimization. The central empirical finding is that DPO should not treat partially correct rejected reasoning as uniformly negative: protecting correct prefixes consistently improves behavior relative to vanilla DPO. \cmdpo{} extends this idea with suffix decay and performs best on average in controlled harder arithmetic, but GSM8K-style pilots show that suffix decay is not yet a robust advantage over simpler masks. Future work should focus on cleaner style-matched preference data and stronger first-error localization before claiming broad GSM8K gains.

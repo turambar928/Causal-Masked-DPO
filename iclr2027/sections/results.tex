@@ -1,0 +1,71 @@
+\section{Results}
+
+\subsection{Harder arithmetic supports causal masking}
+
+Table~\ref{tab:harder-multiseed} shows the 500-example harder arithmetic evaluation after training on 2,000 preference pairs over three seeds. Vanilla DPO is consistently harmful. Prefix-masked and first-error-only DPO are much stronger. \cmdpo{} is best on average, but its margin over first-error-only DPO is small.
+
+\begin{table}[t]
+\caption{Harder arithmetic eval500 after harder2000 training. Mean and standard deviation are over three seeds.}
+\label{tab:harder-multiseed}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & Accuracy & Std. \\
+\midrule
+Base & 0.410 & -- \\
+Vanilla DPO & 0.253 & 0.054 \\
+Prefix-masked DPO & 0.365 & 0.012 \\
+First-error-only DPO & 0.427 & 0.016 \\
+\cmdpo{} & \textbf{0.433} & 0.011 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+This result supports the central causal-masking claim: uniformly penalizing rejected reasoning is unsafe, and protecting pre-error reasoning substantially improves behavior. It does not, by itself, prove that suffix decay is much better than simply training on the first erroneous step.
+
+\subsection{GSM8K pilots are mixed}
+
+Table~\ref{tab:gsm8k-pilots} summarizes the GSM8K-style pilots on a 100-example evaluation set. As localization and filtering improve, all trained variants can beat the base model. However, \cmdpo{} does not dominate. Prefix-masked DPO is best in the 109-example high-quality setting, while first-error-only is best in the more-candidates setting.
+
+\begin{table}[t]
+\caption{GSM8K-style eval100. Entries are correct out of 100.}
+\label{tab:gsm8k-pilots}
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+Training data & Base & Vanilla & Prefix & First-error & \cmdpo{} \\
+\midrule
+Cheap localizer, 49 rows & 16 & 19 & \textbf{22} & 21 & 20 \\
+API judge, 49 rows & 16 & 18 & \textbf{25} & 23 & 20 \\
+API judge HQ, 109 rows & 16 & 25 & \textbf{29} & 28 & 28 \\
+More-candidates HQ, 87 rows & 16 & 22 & 25 & \textbf{28} & 27 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Localization and data quality}
+
+Table~\ref{tab:localization} shows why the GSM8K pilots should be interpreted cautiously. API judge localization greatly improves the fraction of examples with non-final first errors, but strict high-quality filtering still leaves limited data. Increasing candidates raises the sampled-correct chosen rate in raw data, yet does not improve downstream accuracy after filtering.
+
+\begin{table}[t]
+\caption{GSM8K-style localization and filtering diagnostics.}
+\label{tab:localization}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Dataset & Rows & Non-final first error & Sampled chosen \\
+\midrule
+Cheap localizer & 49 & 1 / 49 & 26 / 49 \\
+API judge & 49 & 26 / 49 & 26 / 49 \\
+API judge raw & 199 & 121 / 199 & 77 / 199 \\
+API judge HQ & 109 & 109 / 109 & 34 / 109 \\
+More-candidates raw & 200 & 101 / 200 & 101 / 200 \\
+More-candidates HQ & 87 & 87 / 87 & 35 / 87 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+The robust conclusion is that prefix protection matters. The suffix-decay component of \cmdpo{} remains plausible on controlled arithmetic, but the GSM8K pilots do not yet establish it as a reliable additional improvement.
