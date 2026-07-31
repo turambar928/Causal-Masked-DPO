@@ -1982,3 +1982,98 @@ cmdpo,0.2800,28,100
   - 增加 `num_candidates` 到 8 或 16；
   - 降低 sampling temperature，提高 sampled correct 率；
   - 或使用 API 生成风格匹配的 chosen solution。
+
+## 29. GSM8K more-candidates chosen quality test
+
+为了提高 sampled-correct chosen 比例，先做了一个 50 条 pilot：
+
+```text
+num_candidates: 8
+temperature: 0.5
+top_p: 0.9
+max_new_tokens: 200
+seed: 46
+output: data/processed/gsm8k_small/gsm8k_pairs_50_structured_morecands.jsonl
+```
+
+pilot 结果：
+
+```text
+rows: 50
+sampled_chosen: 27
+gold_fallback: 23
+sampled_rate: 54.0%
+```
+
+由于 sampled chosen 比例明显高于上一轮，扩到 200 条：
+
+```text
+output: data/processed/gsm8k_small/gsm8k_pairs_200_structured_morecands.jsonl
+rows: 200
+sampled_chosen: 101
+gold_fallback: 99
+sampled_rate: 50.5%
+```
+
+API judge 标注：
+
+```text
+output: data/processed/gsm8k_small/gsm8k_pairs_200_morecands_api_judge_gamma025.jsonl
+rows: 200
+parse_failures: 0
+```
+
+严格过滤仍不足 50：
+
+```text
+require sampled chosen: 35 / 200
+```
+
+放宽 sampled-chosen 后得到高质量训练集：
+
+```text
+output: data/processed/gsm8k_small/gsm8k_pairs_200_morecands_api_judge_filtered_hq.jsonl
+kept: 87 / 200
+sampled_chosen: 35
+gold_fallback_chosen: 52
+sampled_rate_in_filtered: 40.2%
+first_error_dist: {0: 9, 1: 8, 2: 9, 3: 7, 4: 5, 5: 18, 6: 3, 7: 9, 8: 8, 9: 2, 10: 5, 11: 4}
+```
+
+训练损失：
+
+```text
+vanilla: 0.4009
+prefix_masked: 0.3141
+first_error_only: 0.2961
+cmdpo: 0.2998
+```
+
+GSM8K eval100：
+
+```text
+summary: outputs/gsm8k_morecands_api_judge_hq_eval100_accuracy.jsonl
+details: outputs/gsm8k_morecands_api_judge_hq_eval100_details.jsonl
+
+model,accuracy,correct,total
+base,0.1600,16,100
+vanilla,0.2200,22,100
+prefix_masked,0.2500,25,100
+first_error_only,0.2800,28,100
+cmdpo,0.2700,27,100
+```
+
+和上一轮 109 条 HQ 数据对比：
+
+```text
+previous_hq: vanilla 25, prefix_masked 29, first_error_only 28, cmdpo 28
+morecands_hq: vanilla 22, prefix_masked 25, first_error_only 28, cmdpo 27
+```
+
+结论：
+
+- 增加 candidates 和降低 temperature 确实提高了 raw sampled chosen 比例：`50.5%` vs 之前 `38.7%`。
+- 但经过 first-error / confidence / truncation 过滤后，训练集只剩 `87` 条，且最终 eval 没有改善。
+- CM-DPO 仍没有超过 first-error-only 或 prefix-masked。
+- 说明单纯提高 sampled correct 比例不够，GSM8K 还需要更一致的 chosen/rejected 风格和更强的 rejected 质量控制。
+- 当前最有价值的 GSM8K 结论是负结果：prefix protection consistently helps, but suffix decay has not yet shown a benefit on these small GSM8K-style pilots.
