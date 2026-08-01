@@ -24,6 +24,12 @@ First-error-only DPO & 0.427 & 0.016 \\
 
 This result supports the central causal-masking claim: uniformly penalizing rejected reasoning is unsafe, and protecting pre-error reasoning substantially improves behavior. It does not, by itself, prove that suffix decay is much better than simply training on the first erroneous step.
 
+\subsection{Ablation: prefix protection versus suffix decay}
+
+The four variants decompose the effect of causal masking. Vanilla DPO has no prefix protection and drops from a base accuracy of $0.410$ to $0.253$. Prefix-masked DPO changes only the pre-error prefix weights and recovers much of the lost performance, reaching $0.365$. First-error-only DPO removes suffix pressure entirely and reaches $0.427$. \cmdpo{} keeps a decayed suffix penalty and reaches $0.433$.
+
+This pattern supports a clear primary conclusion and a cautious secondary one. The primary conclusion is that prefix protection is responsible for the largest improvement over vanilla DPO. The secondary conclusion is that suffix decay can help in the controlled setting, but the observed gain over first-error-only DPO is small relative to the current scale of the experiments.
+
 \subsection{GSM8K pilots are mixed}
 
 Table~\ref{tab:gsm8k-pilots} summarizes the GSM8K-style pilots on a 100-example evaluation set. As localization and filtering improve, all trained variants can beat the base model. However, \cmdpo{} does not dominate. Prefix-masked DPO is best in the 109-example high-quality setting, while first-error-only is best in the more-candidates setting.

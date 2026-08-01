@@ -17,7 +17,7 @@ and the loss is
 \right)
 \right].
 \end{equation}
-When $\yl$ is a multi-step reasoning trace, this objective penalizes all rejected tokens even if some earlier steps are correct.
+When $\yl$ is a multi-step reasoning trace, this objective penalizes all rejected tokens even if some earlier steps are correct. The failure is specific to the rejected side: the preferred response should remain positive evidence, but a rejected response may contain both positive and negative reasoning evidence.
 
 \subsection{Causal step weights}
 
@@ -25,7 +25,7 @@ Let the rejected response be segmented into steps
 \begin{equation}
 \yl = (s_1,\ldots,s_K),
 \end{equation}
-and let $m$ be the estimated first-error index. A causal rejected-side mask assigns each rejected step a weight $w_k$. The preferred response remains fully weighted. The weighted rejected reward is
+and let $m$ be the estimated first-error index. A causal rejected-side mask assigns each rejected step a nonnegative weight $w_k$. Steps with $k<m$ occurred before the localized error and should not receive negative pressure from the rejected label. The preferred response remains fully weighted. The weighted rejected reward is
 \begin{equation}
 r_\theta^w(\yl \mid x)
 =
@@ -49,15 +49,27 @@ The masked DPO loss is
 
 \subsection{Variants}
 
-The experiments compare four weight patterns:
-\begin{itemize}
-    \item \textbf{Vanilla DPO:} $w_k=1$ for all rejected steps.
-    \item \textbf{Prefix-masked DPO:} $w_k=0$ for $k<m$ and $w_k=1$ for $k \ge m$.
-    \item \textbf{First-error-only DPO:} $w_m=1$ and $w_k=0$ for $k \ne m$.
-    \item \textbf{\cmdpo:} $w_k=0$ for $k<m$, $w_m=1$, and $w_k=\gamma^{k-m}$ for $k>m$.
-\end{itemize}
+Table~\ref{tab:mask-family} shows the four weight patterns used in the experiments. These variants isolate two design choices: whether to protect the pre-error prefix, and how much penalty to assign after the first error.
+
+\begin{table}[t]
+\caption{Rejected-side causal masking family. The preferred response is always fully weighted.}
+\label{tab:mask-family}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Variant & Prefix $k<m$ & First error $k=m$ & Suffix $k>m$ \\
+\midrule
+Vanilla DPO & $1$ & $1$ & $1$ \\
+Prefix-masked DPO & $0$ & $1$ & $1$ \\
+First-error-only DPO & $0$ & $1$ & $0$ \\
+\cmdpo{} & $0$ & $1$ & $\gamma^{k-m}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
 \cmdpo{} therefore adds suffix decay to the robust prefix-protection idea. This distinction matters empirically: the prefix mask is consistently useful, while the extra decay design is not always better than simpler alternatives.
 
 \subsection{Implementation}
 
-Step-level weights are expanded to token-level response masks using tokenizer offset mappings. The DPO trainer then computes sequence log-likelihoods with the response masks applied. The reference model is frozen, and all reported model updates use LoRA adapters.
+Step-level weights are expanded to token-level response masks by aligning segmented step spans to response tokens. The DPO trainer computes policy and reference log-likelihoods with these masks applied to the rejected response. The reference model is frozen, and all reported model updates use LoRA adapters. If a rejected response cannot be localized or if the first error is ambiguous, the example is filtered rather than assigned a high-confidence causal mask.

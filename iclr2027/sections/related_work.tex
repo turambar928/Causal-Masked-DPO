@@ -1,10 +1,16 @@
 \section{Related Work}
 
 \paragraph{Preference optimization.}
-Reinforcement learning from human feedback aligns language models by learning a reward model and optimizing against it \citep{ouyang2022training}. DPO \citep{rafailov2023direct} removes the explicit reward-model stage and directly optimizes preference pairs through policy-reference likelihood ratios. Our work keeps DPO's trajectory-level data interface, but modifies how rejected trajectories contribute to the objective.
+Reinforcement learning from human feedback aligns language models by learning a reward model and optimizing against it \citep{ouyang2022training}. DPO \citep{rafailov2023direct} removes the explicit reward-model stage and directly optimizes preference pairs through policy-reference likelihood ratios. Our work keeps DPO's trajectory-level data interface, but modifies how rejected trajectories contribute to the objective. This makes the proposal orthogonal to the source of the preference pair: it can be applied to human preferences, verifier-generated preferences, or synthetic reasoning preferences when a first-error signal is available.
 
 \paragraph{Reasoning supervision.}
 Benchmarks such as GSM8K \citep{cobbe2021training} and MATH \citep{hendrycks2021measuring} emphasize multi-step mathematical reasoning. Process supervision and step-level verification aim to supervise intermediate reasoning rather than only final answers \citep{lightman2023lets}. Causal rejected-side masking is complementary: it can consume first-error signals from verifiers or judges, but does not require transforming the data into explicit step-level preference pairs.
+
+\paragraph{Credit assignment in reasoning traces.}
+Outcome-level supervision gives a single label to an entire solution. This is convenient, but it conflates the step that caused failure with earlier steps that may be correct and later steps that may be consequences of the first error. Process supervision addresses this by labeling intermediate states. Our setting lies between these extremes: we assume a first-error localization signal, then use it to reweight the rejected side of a standard preference objective. The goal is not to replace process supervision, but to use limited process information inside a DPO-compatible loss.
+
+\paragraph{Masked and weighted objectives.}
+The method can be viewed as a token-weighted variant of DPO in which weights are induced by step-level causal structure. The preferred response remains fully weighted, while the rejected response receives structured weights. This differs from generic loss reweighting because the mask is asymmetric and causal: tokens before the first error in the rejected response are not treated as negative evidence.
 
 \paragraph{Parameter-efficient adaptation.}
 Our experiments use LoRA \citep{hu2022lora} to make repeated preference-optimization comparisons feasible. The masking objective is independent of LoRA and can also be used with full fine-tuning.
