@@ -73,3 +73,7 @@ First-error-only DPO & $0$ & $1$ & $0$ \\
 \subsection{Implementation}
 
 Step-level weights are expanded to token-level response masks by aligning segmented step spans to response tokens. The DPO trainer computes policy and reference log-likelihoods with these masks applied to the rejected response. The reference model is frozen, and all reported model updates use LoRA adapters. If a rejected response cannot be localized or if the first error is ambiguous, the example is filtered rather than assigned a high-confidence causal mask.
+
+\subsection{Training procedure}
+
+The full procedure is intentionally close to standard DPO. For each preference pair, we segment the rejected response, localize the first erroneous step, choose a rejected-side weight schedule from Table~\ref{tab:mask-family}, and expand the resulting step weights to token weights. Training then uses the same policy-reference likelihood ratio as DPO, with the weighted rejected reward replacing the unweighted rejected reward. This design isolates the causal credit-assignment intervention: the optimizer, reference model, preferred-response treatment, and LoRA adaptation setup are unchanged across variants.

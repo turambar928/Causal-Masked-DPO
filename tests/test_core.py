@@ -11,10 +11,12 @@ class CoreTest(unittest.TestCase):
     def test_extract_answer(self) -> None:
         self.assertEqual(extract_answer("We compute it. #### 42"), "42")
         self.assertEqual(extract_answer("So the answer is \\boxed{7/2}."), "7/2")
+        self.assertEqual(extract_answer("Final answer. #### 362Human: next prompt"), "362")
 
     def test_verify_answer(self) -> None:
         self.assertTrue(verify_answer("The answer is 3.5", "\\boxed{7/2}"))
         self.assertTrue(verify_answer("#### 1,024", "1024"))
+        self.assertTrue(verify_answer("Final answer. #### 362Human: next prompt", "#### 362"))
         self.assertFalse(verify_answer("#### 5", "6"))
 
     def test_segment_steps(self) -> None:

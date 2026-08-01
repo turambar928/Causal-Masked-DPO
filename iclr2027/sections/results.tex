@@ -30,6 +30,54 @@ The four variants decompose the effect of causal masking. Vanilla DPO has no pre
 
 This pattern supports a clear primary conclusion and a cautious secondary one. The primary conclusion is that prefix protection is responsible for the largest improvement over vanilla DPO. The secondary conclusion is that suffix decay can help in the controlled setting, but the observed gain over first-error-only DPO is small relative to the current scale of the experiments.
 
+\subsection{Qualitative mask example}
+
+Table~\ref{tab:qual-example} shows a representative harder-arithmetic rejected trace. The first step is correct, but the second step makes a local arithmetic error: $9 \times 6$ is written as $63$ rather than $54$. Later steps then inherit the wrong subtotal. Vanilla DPO penalizes the entire rejected response, including the correct adult-ticket computation. \cmdpo{} masks that prefix, applies full penalty to the first erroneous step, and assigns decayed weights to the inherited suffix.
+
+\begin{table}[t]
+\caption{Example rejected trace and \cmdpo{} weights with $\gamma=0.25$. The first erroneous step is marked in bold.}
+\label{tab:qual-example}
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+Step & Rejected reasoning step & Weight \\
+\midrule
+1 & Adult tickets: $19 \times 14 = 266$ dollars. & $0$ \\
+2 & \textbf{Child tickets: $9 \times 6 = 63$ dollars.} & $1$ \\
+3 & Subtotal: $266 + 63 = 329$ dollars. & $0.25$ \\
+4 & Final total: $329 - 20 + 29 = 338$. & $0.0625$ \\
+5 & Final answer: $338$. & $0.0156$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+This example illustrates the intended causal credit assignment. The rejected final answer is wrong, but not every token in the rejected trace is equally wrong. The correct prefix is useful evidence about the task, the first error is the main negative evidence, and the suffix is a consequence of the erroneous state.
+
+\subsection{Suffix schedule controls the error--suffix tradeoff}
+
+Table~\ref{tab:gamma-likelihood} reports a deterministic likelihood probe after harder2000 training. The endpoints correspond to first-error-only DPO ($\gamma=0$) and prefix-masked DPO ($\gamma=1$). All settings strongly increase the likelihood of pre-error prefixes, confirming that causal masks protect correct rejected prefixes. Increasing $\gamma$ makes the first-error penalty stronger, but it also increasingly penalizes post-error suffix tokens. The $\gamma=0.75$ setting gives the strongest first-error suppression among decayed schedules, while $\gamma=1$ behaves like full suffix penalty and heavily suppresses the suffix.
+
+\begin{table}[t]
+\caption{Harder2000 likelihood probe for \cmdpo{} suffix schedules. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans. Higher prefix delta means better prefix retention; more negative error delta means stronger first-error suppression.}
+\label{tab:gamma-likelihood}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Schedule & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+$\gamma=0$ & 35.112 & -18.082 & 17.304 & -15.091 \\
+$\gamma=0.25$ & 35.234 & -20.470 & 16.688 & -17.658 \\
+$\gamma=0.5$ & \textbf{35.320} & -20.866 & 15.317 & -18.392 \\
+$\gamma=0.75$ & 35.254 & -23.838 & 11.550 & -22.246 \\
+$\gamma=1$ & 35.102 & \textbf{-27.394} & -44.424 & \textbf{-35.863} \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+This ablation clarifies why suffix decay should be treated as a schedule rather than a single fixed claim. Small and moderate $\gamma$ values preserve prefix likelihood and suppress the first error without aggressively suppressing inherited suffix text. Large $\gamma$ values more closely resemble prefix-masked DPO: they apply strong pressure to all post-error tokens, which can be useful for error suppression but risks treating consequence steps as independently wrong.
+
 \subsection{GSM8K pilots are mixed}
 
 Table~\ref{tab:gsm8k-pilots} summarizes the GSM8K-style pilots on a 100-example evaluation set. As localization and filtering improve, all trained variants can beat the base model. However, \cmdpo{} does not dominate. Prefix-masked DPO is best in the 109-example high-quality setting, while first-error-only is best in the more-candidates setting.

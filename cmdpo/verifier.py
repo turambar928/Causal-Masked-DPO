@@ -24,7 +24,11 @@ def extract_answer(text: str) -> str | None:
 
     answer_matches = _ANSWER_RE.findall(text)
     if answer_matches:
-        return answer_matches[-1].strip()
+        answer = answer_matches[-1].strip()
+        numbers = _NUMBER_RE.findall(answer)
+        if numbers:
+            return numbers[-1].strip()
+        return answer
 
     numbers = _NUMBER_RE.findall(text)
     if numbers:

@@ -31,11 +31,17 @@ def load_model(
     )
     if adapter_path:
         model = PeftModel.from_pretrained(model, adapter_path)
+    model.generation_config.do_sample = False
+    model.generation_config.temperature = None
+    model.generation_config.top_p = None
+    model.generation_config.top_k = None
     model.eval()
     return model
 
 
 def build_eval_prompt(prompt: str) -> str:
+    if "####" in prompt:
+        return prompt
     return (
         f"{prompt}\n\n"
         "Solve the problem. Show the calculation briefly and end with exactly one line: #### <answer>"

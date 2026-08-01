@@ -17,3 +17,5 @@ The GSM8K pilots are intentionally treated as diagnostic rather than final bench
 \subsection{Evaluation questions}
 
 We evaluate the masking family through three questions. First, does vanilla DPO degrade reasoning behavior when rejected traces contain correct prefixes? Second, does masking the pre-error prefix recover performance? Third, does assigning a decayed penalty to post-error suffix steps improve over simpler first-error-only or prefix-masked alternatives? The first two questions are the core causal-masking claims; the third is the specific additional hypothesis behind \cmdpo{}.
+
+In addition to generation accuracy, we report deterministic likelihood probes on the rejected response. These probes measure the change in average masked log-likelihood for pre-error prefixes, first-error steps, post-error suffixes, and the full \cmdpo{} mask. They are useful because they directly test whether an adapter protects correct prefixes and suppresses localized errors, independent of decoding noise.
