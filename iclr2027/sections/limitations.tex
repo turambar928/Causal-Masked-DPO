@@ -8,7 +8,7 @@ The current experiments also use Qwen2.5-0.5B-Instruct with LoRA. Larger models,
 
 The method assumes usable step segmentation and first-error localization. The controlled off-by-one experiment shows that a one-step shift can protect the true error and therefore reverse the intended training signal. This is the main practical risk of hard causal masks. A production version should use calibrated localization confidence, soft masks, or verifier-derived uncertainty instead of treating every predicted first-error index as exact.
 
-The current loss also uses unnormalized summed token weights on the rejected side. This is simple and preserves the intended amount of negative evidence, but it does not isolate causal structure from total gradient scale. Larger studies should include per-example weight normalization and uniform down-weighting baselines.
+The current loss also uses unnormalized summed token weights on the rejected side. This is simple and preserves the intended amount of negative evidence. Our normalization controls suggest that normalizing too aggressively can remove first-error suppression in the current setup. However, this is not a final answer about scaling: larger studies should sweep normalization schemes, $\beta$, and learning rate jointly, because normalization changes the effective reward scale.
 
 Generation accuracy is also sensitive to decoding configuration and prompt formatting, especially for small instruction-tuned models. We therefore use likelihood probes as mechanism evidence and treat generation accuracy as a downstream behavioral check rather than the only metric.
 

@@ -2,9 +2,19 @@ from __future__ import annotations
 
 import unittest
 
+import torch
+
+from cmdpo.loss import masked_sequence_logps
 from cmdpo.localization import build_cm_weights, localize_from_success_rates
 from cmdpo.segmentation import segment_steps
 from cmdpo.verifier import extract_answer, verify_answer
+
+
+class ConstantTokenModel(torch.nn.Module):
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> object:
+        vocab_size = int(input_ids.max().item()) + 2
+        logits = torch.zeros((*input_ids.shape, vocab_size), dtype=torch.float)
+        return type("Output", (), {"logits": logits})()
 
 
 class CoreTest(unittest.TestCase):
@@ -32,6 +42,15 @@ class CoreTest(unittest.TestCase):
         result = localize_from_success_rates([0.75, 0.75, 0.0, 0.0], gamma=0.5, tau=0.3)
         self.assertEqual(result.first_error_step, 2)
         self.assertEqual(result.step_weights, [0.0, 0.0, 1.0, 0.5])
+
+    def test_masked_sequence_logps_normalization(self) -> None:
+        model = ConstantTokenModel()
+        input_ids = torch.tensor([[0, 1, 2, 3]])
+        attention_mask = torch.ones_like(input_ids)
+        response_mask = torch.tensor([[0.0, 1.0, 1.0, 0.0]])
+        summed = masked_sequence_logps(model, input_ids, attention_mask, response_mask)
+        normalized = masked_sequence_logps(model, input_ids, attention_mask, response_mask, normalize=True)
+        self.assertAlmostEqual(float(normalized.item()), float((summed / 2).item()), places=6)
 
 
 if __name__ == "__main__":

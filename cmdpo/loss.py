@@ -18,11 +18,16 @@ def masked_sequence_logps(
     input_ids: torch.Tensor,
     attention_mask: torch.Tensor,
     response_mask: torch.Tensor,
+    normalize: bool = False,
 ) -> torch.Tensor:
     logps = token_logprobs(model, input_ids, attention_mask)
     shifted_mask = response_mask[:, 1:].to(logps.dtype)
     shifted_attention = attention_mask[:, 1:].to(logps.dtype)
-    return (logps * shifted_mask * shifted_attention).sum(dim=-1)
+    weighted = (logps * shifted_mask * shifted_attention).sum(dim=-1)
+    if not normalize:
+        return weighted
+    normalizer = (shifted_mask * shifted_attention).sum(dim=-1).clamp_min(1.0)
+    return weighted / normalizer
 
 
 def cmdpo_loss(
@@ -30,6 +35,7 @@ def cmdpo_loss(
     ref_model: torch.nn.Module,
     batch: dict[str, torch.Tensor],
     beta: float = 0.1,
+    normalize_rejected: bool = False,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     chosen_logps = masked_sequence_logps(
         policy_model,
@@ -42,6 +48,7 @@ def cmdpo_loss(
         batch["rejected_input_ids"],
         batch["rejected_attention_mask"],
         batch["rejected_response_mask"],
+        normalize=normalize_rejected,
     )
     with torch.no_grad():
         chosen_ref_logps = masked_sequence_logps(
@@ -55,6 +62,7 @@ def cmdpo_loss(
             batch["rejected_input_ids"],
             batch["rejected_attention_mask"],
             batch["rejected_response_mask"],
+            normalize=normalize_rejected,
         )
 
     chosen_rewards = chosen_logps - chosen_ref_logps

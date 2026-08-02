@@ -100,6 +100,47 @@ First-error shifted $+1$ & \textbf{35.700} & 12.423 & 5.526 & 12.492 \\
 \end{center}
 \end{table}
 
+\subsection{Normalization changes the optimization signal}
+
+The reviewer raised a reasonable concern that performance might come from total rejected-side weight rather than mask structure. Table~\ref{tab:normalization} addresses that concern. We compare the clean \cmdpo{} setting against a normalized variant that divides the rejected-side masked log-likelihood by its active mask mass, and against a uniform-downweight baseline that scales every rejected token by the same constant. Both controls preserve the prefix-level likelihood gain but substantially weaken or reverse first-error suppression. The result suggests that mask structure and total penalty mass are not interchangeable: the sum-aggregated causal mask is doing more than simply reducing gradient scale.
+
+\begin{table}[t]
+\caption{Harder2000 normalization controls. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans.}
+\label{tab:normalization}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+Normalized \cmdpo{} & 35.364 & 10.643 & 16.417 & 13.602 \\
+Uniform downweight $0.25$ & 35.741 & 5.397 & 21.037 & 9.197 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{Localization noise degrades the intended signal}
+
+Table~\ref{tab:localization-noise} summarizes the remaining noise sweep. A one-step shift in either direction is enough to distort the training signal: shifting the index earlier over-penalizes correct prefixes, while shifting it later or randomly corrupting it weakens or reverses suppression of the true first error. This is the most direct evidence that causal masking is useful only when first-error localization is at least approximately correct.
+
+\begin{table}[t]
+\caption{Harder2000 localization-noise controls. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans.}
+\label{tab:localization-noise}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Shift $-1$ & -25.059 & -17.854 & 23.175 & -13.644 \\
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+Shift $+1$ & 35.700 & 12.423 & 5.526 & 12.492 \\
+Random 25\% noise & 34.893 & -1.293 & 19.920 & 2.275 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
 \subsection{GSM8K pilots are mixed}
 
 Table~\ref{tab:gsm8k-pilots} summarizes the GSM8K-style pilots on a 100-example evaluation set. As localization and filtering improve, all trained variants can beat the base model. However, \cmdpo{} does not dominate. Prefix-masked DPO is best in the 109-example high-quality setting, while first-error-only is best in the more-candidates setting.

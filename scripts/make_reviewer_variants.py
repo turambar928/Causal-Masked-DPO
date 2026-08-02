@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,28 @@ def shifted_error(row: dict[str, Any], shift: int) -> dict[str, Any]:
     return item
 
 
+def random_error(row: dict[str, Any], rng: random.Random, noise_rate: float) -> dict[str, Any]:
+    item = dict(row)
+    steps = item["rejected_steps"]
+    original = int(item["first_error_step"])
+    noisy = rng.random() < noise_rate
+    if noisy and len(steps) > 1:
+        candidates = [idx for idx in range(len(steps)) if idx != original]
+        shifted = rng.choice(candidates)
+    else:
+        shifted = original
+    item["first_error_step"] = shifted
+    item["step_weights"] = cmdpo_weights(len(steps), shifted, float(item.get("metadata", {}).get("gamma", 0.25)))
+    item["metadata"] = {
+        **item.get("metadata", {}),
+        "reviewer_variant": f"random_error_noise_{noise_rate:.2f}",
+        "localization_noisy": noisy,
+        "original_first_error_step": original,
+        "shifted_first_error_step": shifted,
+    }
+    return item
+
+
 def truncated_rejected(row: dict[str, Any]) -> dict[str, Any]:
     item = dict(row)
     m = int(item["first_error_step"])
@@ -55,11 +78,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--variant", choices=["shift_plus_one", "shift_minus_one", "truncated"], required=True)
+    parser.add_argument(
+        "--variant",
+        choices=["shift_plus_one", "shift_minus_one", "random_noise", "truncated"],
+        required=True,
+    )
     parser.add_argument("--gamma", type=float, default=0.25)
+    parser.add_argument("--noise-rate", type=float, default=0.25)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     rows = read_jsonl(args.input)
+    rng = random.Random(args.seed)
     output = []
     for row in rows:
         row = dict(row)
@@ -68,6 +98,8 @@ def main() -> None:
             output.append(shifted_error(row, 1))
         elif args.variant == "shift_minus_one":
             output.append(shifted_error(row, -1))
+        elif args.variant == "random_noise":
+            output.append(random_error(row, rng, args.noise_rate))
         elif args.variant == "truncated":
             output.append(truncated_rejected(row))
         else:
