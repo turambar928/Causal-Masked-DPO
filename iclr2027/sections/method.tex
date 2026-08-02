@@ -70,9 +70,15 @@ First-error-only DPO & $0$ & $1$ & $0$ \\
 
 \cmdpo{} therefore adds suffix decay to the robust prefix-protection idea. This distinction matters empirically: the prefix mask is consistently useful, while the extra decay design is not always better than simpler alternatives.
 
+\subsection{Interpretation and normalization}
+
+The objective is a DPO-style credit-assignment objective, not a claim that the one-sided weighted loss is exactly equivalent to canonical trajectory-level DPO under the usual Bradley--Terry reward interpretation. Standard DPO compares two complete trajectories with unweighted policy-reference log-ratios. In contrast, our objective changes only the rejected-side aggregation before forming the same logistic preference loss. This is deliberate: the method encodes the assumption that a failed reasoning trace contains heterogeneous evidence, with correct pre-error tokens, a localized causal error, and consequence tokens.
+
+In the current implementation, weighted rejected log-likelihoods are summed rather than normalized by the total mask mass. This keeps the amount of rejected-side evidence proportional to the number and weight of penalized tokens, but it also means different masks can change the effective gradient scale. We therefore compare variants under matched optimizer settings and include likelihood probes that report span-specific changes. A normalized variant, where each example is divided by $\sum_t w_t$, is an important control for future larger-scale experiments because it separates mask structure from total penalty mass.
+
 \subsection{Implementation}
 
-Step-level weights are expanded to token-level response masks by aligning segmented step spans to response tokens. The DPO trainer computes policy and reference log-likelihoods with these masks applied to the rejected response. The reference model is frozen, and all reported model updates use LoRA adapters. If a rejected response cannot be localized or if the first error is ambiguous, the example is filtered rather than assigned a high-confidence causal mask.
+Step-level weights are expanded to token-level response masks by aligning segmented step character spans to tokenizer offsets. Each response token receives the weight of the step whose character span overlaps that token; prompt tokens are excluded from the rejected-response mask. The DPO trainer computes policy and reference log-likelihoods with these masks applied to the rejected response. The reference model is frozen, and all reported model updates use LoRA adapters. If a rejected response cannot be segmented, cannot be localized, or has an ambiguous first-error index, the example is filtered rather than assigned a high-confidence causal mask.
 
 \subsection{Training procedure}
 

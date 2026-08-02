@@ -16,4 +16,5 @@ Our contributions are:
     \item We introduce a rejected-side masking family that includes vanilla DPO, prefix-masked DPO, first-error-only DPO, and \cmdpo{} as different weight choices under one objective.
     \item We implement token-level masked DPO with LoRA training and first-error localization, enabling direct comparisons under the same model, data, and optimization setup.
     \item We report controlled arithmetic and GSM8K-style pilots showing that prefix protection is robustly useful, while suffix decay remains task- and data-quality-sensitive.
+    \item We add diagnostic controls for suffix schedules, truncated rejected responses, and off-by-one localization noise, clarifying when the masking mechanism succeeds and when it fails.
 \end{itemize}
