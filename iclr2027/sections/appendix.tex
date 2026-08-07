@@ -1,0 +1,108 @@
+\section{Additional Diagnostics}
+
+\subsection{Qualitative mask example}
+\label{app:qual-example}
+
+Table~\ref{tab:qual-example} shows a representative harder-arithmetic rejected trace. The first step is correct, but the second step makes a local arithmetic error: $9 \times 6$ is written as $63$ rather than $54$. Later steps then inherit the wrong subtotal. Vanilla DPO penalizes the entire rejected response, including the correct adult-ticket computation. \cmdpo{} masks that prefix, applies full penalty to the first erroneous step, and assigns decayed weights to the inherited suffix.
+
+\begin{table}[h]
+\caption{Example rejected trace and \cmdpo{} weights with $\gamma=0.25$. The first erroneous step is marked in bold.}
+\label{tab:qual-example}
+\begin{center}
+\begin{tabular}{cll}
+\toprule
+Step & Rejected reasoning step & Weight \\
+\midrule
+1 & Adult tickets: $19 \times 14 = 266$ dollars. & $0$ \\
+2 & \textbf{Child tickets: $9 \times 6 = 63$ dollars.} & $1$ \\
+3 & Subtotal: $266 + 63 = 329$ dollars. & $0.25$ \\
+4 & Final total: $329 - 20 + 29 = 338$. & $0.0625$ \\
+5 & Final answer: $338$. & $0.0156$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+The rejected final answer is wrong, but not every token in the rejected trace is equally wrong. The correct prefix is useful evidence about the task, the first error is the main negative evidence, and the suffix is a consequence of the erroneous state.
+
+\subsection{Reviewer controls}
+\label{app:diagnostics}
+
+Table~\ref{tab:reviewer-baselines} adds two diagnostics motivated by the main threats to validity. A truncated-rejected baseline keeps only the rejected trace through the first error and then trains standard DPO on that shorter rejected response. It strongly suppresses the first-error span, but it also reduces the likelihood of the correct pre-error prefix. Thus, the gain from causal masking is not merely caused by shortening rejected responses.
+
+\begin{table}[h]
+\caption{Harder2000 reviewer diagnostics. Entries are post-training minus pre-training masked log-likelihood changes on the original rejected spans. Higher prefix delta means better prefix retention; more negative error delta means stronger suppression of the true first error.}
+\label{tab:reviewer-baselines}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Truncated rejected & -3.938 & \textbf{-40.439} & 17.413 & -37.157 \\
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+First-error shifted $+1$ & \textbf{35.700} & 12.423 & 5.526 & 12.492 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Table~\ref{tab:normalization} compares the clean \cmdpo{} setting against a normalized variant that divides the rejected-side masked log-likelihood by its active mask mass, and against a uniform-downweight baseline that scales every rejected token by the same constant. Both controls preserve the prefix-level likelihood gain but substantially weaken or reverse first-error suppression.
+
+\begin{table}[h]
+\caption{Harder2000 normalization controls. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans.}
+\label{tab:normalization}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+Normalized \cmdpo{} & 35.364 & 10.643 & 16.417 & 13.602 \\
+Uniform downweight $0.25$ & 35.741 & 5.397 & 21.037 & 9.197 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Table~\ref{tab:localization-noise} summarizes localization-noise controls. A one-step shift in either direction is enough to distort the training signal: shifting the index earlier over-penalizes correct prefixes, while shifting it later or randomly corrupting it weakens or reverses suppression of the true first error.
+
+\begin{table}[h]
+\caption{Harder2000 localization-noise controls. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans.}
+\label{tab:localization-noise}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Shift $-1$ & -25.059 & -17.854 & 23.175 & -13.644 \\
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+Shift $+1$ & 35.700 & 12.423 & 5.526 & 12.492 \\
+Random 25\% noise & 34.893 & -1.293 & 19.920 & 2.275 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\subsection{GSM8K-style diagnostics}
+\label{app:gsm8k-diagnostics}
+
+Table~\ref{tab:localization} shows why the GSM8K pilots should be interpreted cautiously. API judge localization greatly improves the fraction of examples with non-final first errors, but strict high-quality filtering still leaves limited data. Increasing candidates raises the sampled-correct chosen rate in raw data, yet does not improve downstream accuracy after filtering.
+
+\begin{table}[h]
+\caption{GSM8K-style localization and filtering diagnostics.}
+\label{tab:localization}
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+Dataset & Rows & Non-final first error & Sampled chosen \\
+\midrule
+Cheap localizer & 49 & 1 / 49 & 26 / 49 \\
+API judge & 49 & 26 / 49 & 26 / 49 \\
+API judge raw & 199 & 121 / 199 & 77 / 199 \\
+API judge HQ & 109 & 109 / 109 & 34 / 109 \\
+More-candidates raw & 200 & 101 / 200 & 101 / 200 \\
+More-candidates HQ & 87 & 87 / 87 & 35 / 87 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
