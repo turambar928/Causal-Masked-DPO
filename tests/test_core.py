@@ -52,6 +52,25 @@ class CoreTest(unittest.TestCase):
         normalized = masked_sequence_logps(model, input_ids, attention_mask, response_mask, normalize=True)
         self.assertAlmostEqual(float(normalized.item()), float((summed / 2).item()), places=6)
 
+    def test_process_positive_loss_is_compatible(self) -> None:
+        from cmdpo.loss import cmdpo_loss
+
+        model = ConstantTokenModel()
+        batch = {
+            "chosen_input_ids": torch.tensor([[0, 1, 2]]),
+            "chosen_attention_mask": torch.tensor([[1, 1, 1]]),
+            "chosen_response_mask": torch.tensor([[0.0, 1.0, 1.0]]),
+            "rejected_input_ids": torch.tensor([[0, 1, 2]]),
+            "rejected_attention_mask": torch.tensor([[1, 1, 1]]),
+            "rejected_response_mask": torch.tensor([[0.0, 1.0, 1.0]]),
+            "positive_input_ids": torch.tensor([[0, 1, 2]]),
+            "positive_attention_mask": torch.tensor([[1, 1, 1]]),
+            "positive_response_mask": torch.tensor([[0.0, 1.0, 1.0]]),
+        }
+        loss, metrics = cmdpo_loss(model, model, batch, beta=0.1, process_positive_weight=0.5)
+        self.assertTrue(torch.isfinite(loss))
+        self.assertIn("process_positive_loss", metrics)
+
 
 if __name__ == "__main__":
     unittest.main()

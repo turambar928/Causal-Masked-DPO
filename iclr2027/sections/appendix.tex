@@ -106,3 +106,23 @@ More-candidates HQ & 87 & 87 / 87 & 35 / 87 \\
 \end{tabular}
 \end{center}
 \end{table}
+
+\subsection{Process-positive augmentation}
+\label{app:process-positive}
+
+Process-positive augmentation treats the correct prefix of the rejected trace as an auxiliary positive sequence. Table~\ref{tab:process-positive} shows that this baseline preserves the prefix improvement, but it suppresses the true first error less strongly than clean \cmdpo{}. In other words, adding the correct prefix as a positive signal helps, but it does not replace rejected-side causal masking.
+
+\begin{table}[h]
+\caption{Harder2000 process-positive baseline. Entries are post-training minus pre-training masked log-likelihood changes on rejected spans.}
+\label{tab:process-positive}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Variant & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ & Mask $\Delta$ \\
+\midrule
+Clean \cmdpo{} & 35.218 & -20.436 & 16.718 & -17.608 \\
+Process-positive $0.2$ & 35.330 & -14.578 & 10.583 & -12.228 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}

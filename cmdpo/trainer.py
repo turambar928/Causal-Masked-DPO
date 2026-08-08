@@ -15,12 +15,14 @@ class CMDPOTrainer(Trainer):
         ref_model: torch.nn.Module,
         beta: float = 0.1,
         normalize_rejected: bool = False,
+        process_positive_weight: float = 0.0,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self.ref_model = ref_model
         self.beta = beta
         self.normalize_rejected = normalize_rejected
+        self.process_positive_weight = process_positive_weight
         self.ref_model.eval()
         for param in self.ref_model.parameters():
             param.requires_grad_(False)
@@ -38,6 +40,7 @@ class CMDPOTrainer(Trainer):
             inputs,
             beta=self.beta,
             normalize_rejected=self.normalize_rejected,
+            process_positive_weight=self.process_positive_weight,
         )
         if return_outputs:
             return loss, metrics

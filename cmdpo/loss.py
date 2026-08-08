@@ -36,6 +36,7 @@ def cmdpo_loss(
     batch: dict[str, torch.Tensor],
     beta: float = 0.1,
     normalize_rejected: bool = False,
+    process_positive_weight: float = 0.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     chosen_logps = masked_sequence_logps(
         policy_model,
@@ -64,16 +65,37 @@ def cmdpo_loss(
             batch["rejected_response_mask"],
             normalize=normalize_rejected,
         )
+        positive_logps = None
+        positive_ref_logps = None
+        if "positive_input_ids" in batch:
+            positive_logps = masked_sequence_logps(
+                policy_model,
+                batch["positive_input_ids"],
+                batch["positive_attention_mask"],
+                batch["positive_response_mask"],
+            )
+            positive_ref_logps = masked_sequence_logps(
+                ref_model,
+                batch["positive_input_ids"],
+                batch["positive_attention_mask"],
+                batch["positive_response_mask"],
+            )
 
     chosen_rewards = chosen_logps - chosen_ref_logps
     rejected_rewards = rejected_logps - rejected_ref_logps
     logits = beta * (chosen_rewards - rejected_rewards)
     losses = -F.logsigmoid(logits)
+    if positive_logps is not None and positive_ref_logps is not None and process_positive_weight > 0:
+        positive_loss = -(positive_logps - positive_ref_logps).mean()
+        losses = losses + process_positive_weight * positive_loss
+    else:
+        positive_loss = torch.tensor(0.0, device=losses.device)
 
     metrics = {
         "loss": losses.detach().mean(),
         "chosen_reward": chosen_rewards.detach().mean(),
         "rejected_reward": rejected_rewards.detach().mean(),
         "reward_margin": (chosen_rewards - rejected_rewards).detach().mean(),
+        "process_positive_loss": positive_loss.detach(),
     }
     return losses.mean(), metrics

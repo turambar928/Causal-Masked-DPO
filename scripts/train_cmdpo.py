@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--gradient-accumulation-steps", type=int, default=16)
     parser.add_argument("--use-lora", action="store_true")
     parser.add_argument("--normalize-rejected", action="store_true")
+    parser.add_argument("--process-positive-weight", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -94,6 +95,7 @@ def main() -> None:
         tokenizer=tokenizer,
         beta=args.beta,
         normalize_rejected=args.normalize_rejected,
+        process_positive_weight=args.process_positive_weight,
     )
     trainer.train()
     trainer.save_model(args.output_dir)

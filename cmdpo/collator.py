@@ -84,6 +84,8 @@ class CMDPOCollator:
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
         chosen_encoded = []
         rejected_encoded = []
+        positive_encoded = []
+        has_positive = False
         for item in features:
             chosen_encoded.append(self._encode_pair(item["prompt"], item["chosen"]))
             rejected_weights = item.get("rejected_token_weights")
@@ -95,6 +97,12 @@ class CMDPOCollator:
                     item["step_weights"],
                 )
             rejected_encoded.append(self._encode_pair(item["prompt"], item["rejected"], rejected_weights))
+            positive_prefix = item.get("positive_prefix")
+            if positive_prefix:
+                positive_encoded.append(self._encode_pair(item["prompt"], positive_prefix))
+                has_positive = True
+            else:
+                positive_encoded.append(self._encode_pair("", ""))
 
         pad_id = self.tokenizer.pad_token_id
         if pad_id is None:
@@ -105,4 +113,8 @@ class CMDPOCollator:
             batch[f"{prefix}_input_ids"] = _pad_1d([x["input_ids"] for x in encoded], pad_id)
             batch[f"{prefix}_attention_mask"] = _pad_1d([x["attention_mask"] for x in encoded], 0)
             batch[f"{prefix}_response_mask"] = _pad_float([x["response_mask"] for x in encoded], 0.0)
+        if has_positive:
+            batch["positive_input_ids"] = _pad_1d([x["input_ids"] for x in positive_encoded], pad_id)
+            batch["positive_attention_mask"] = _pad_1d([x["attention_mask"] for x in positive_encoded], 0)
+            batch["positive_response_mask"] = _pad_float([x["response_mask"] for x in positive_encoded], 0.0)
         return batch
