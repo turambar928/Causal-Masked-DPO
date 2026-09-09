@@ -4,17 +4,19 @@ Preference optimization is widely used to adapt language models to desired behav
 
 The problem is causal credit assignment. A rejected mathematical solution can correctly understand the question, set up the right equation, and then make one local arithmetic mistake. Penalizing the entire rejected trajectory suppresses both the actual error and the correct reasoning prefix. This creates an over-penalty failure mode: the model is trained away from useful intermediate reasoning because that reasoning happened to appear inside a rejected final answer.
 
+This is also where the theory matters. The canonical DPO interpretation compares full trajectories under a Bradley--Terry-style preference model. Our modification does not replace that interface; it asymmetrically reweights only the rejected side to reflect the fact that rejected traces contain heterogeneous process evidence. In other words, the paper is not claiming a new reward theory. It is claiming that a first-error-aware rejected-side score is a better inductive bias for reasoning traces than uniform trajectory-level penalty, and we test that claim directly.
+
 We study a simple alternative: causal rejected-side masking. Given a rejected response segmented into steps and an estimate of the first erroneous step, we change only the rejected-side aggregation in DPO. Steps before the first error are protected from negative pressure. The first error receives full penalty. Later steps can either be fully penalized, ignored, or decayed. Causal-Masked DPO (\cmdpo) is one point in this family, using prefix protection plus exponential suffix decay. The framework keeps the same preference-pair interface as DPO and requires only step boundaries and a first-error estimate.
 
 Our empirical results suggest a more nuanced story than the strongest version of the initial hypothesis. On controlled harder arithmetic data, causal masking clearly avoids the severe degradation caused by vanilla DPO. In the strongest multi-seed setting, \cmdpo{} achieves the best mean held-out accuracy. At the same time, its margin over first-error-only DPO is small. On GSM8K-style pilots, prefix protection remains useful, but suffix decay has not yet shown a reliable benefit.
 
-We therefore frame the contribution conservatively. The robust empirical claim is not that one fixed suffix-decay schedule is universally best. Rather, rejected reasoning trajectories contain causal structure, and DPO benefits from respecting at least the most important part of that structure: correct prefixes should not be penalized as if they were errors.
+We therefore frame the contribution conservatively. The robust empirical claim is not that one fixed suffix-decay schedule is universally best. Rather, rejected reasoning trajectories contain causal structure, and DPO benefits from respecting at least the most important part of that structure: correct prefixes should not be penalized as if they were errors. A secondary but important point is that normalization and mask mass are not interchangeable: changing the total amount of rejected-side penalty can erase the very first-error signal the mask is meant to isolate.
 
 Our contributions are:
 \begin{itemize}
     \item We formulate trajectory-level DPO over-penalty as a causal credit-assignment problem in multi-step reasoning.
     \item We introduce a rejected-side masking family that includes vanilla DPO, prefix-masked DPO, first-error-only DPO, and \cmdpo{} as different weight choices under one objective.
     \item We implement token-level masked DPO with LoRA training and first-error localization, enabling direct comparisons under the same model, data, and optimization setup.
-    \item We report controlled arithmetic and GSM8K-style pilots showing that prefix protection is robustly useful, while suffix decay remains task- and data-quality-sensitive.
+    \item We report controlled arithmetic, reviewer controls, a larger 1.5B check, and GSM8K-style pilots showing that prefix protection is robustly useful, while suffix decay remains task- and data-quality-sensitive.
     \item We add diagnostic controls for suffix schedules, truncated rejected responses, and off-by-one localization noise, clarifying when the masking mechanism succeeds and when it fails.
 \end{itemize}

@@ -52,6 +52,13 @@ $\gamma=1$ & 35.102 & \textbf{-27.394} & -44.424 & \textbf{-35.863} \\
 \end{center}
 \end{table}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/gamma_sweep.png}
+\caption{Suffix-schedule tradeoff on harder2000. Prefix retention stays stable, while stronger suffix decay increasingly suppresses the first error and eventually flips the suffix behavior at $\gamma=1$.}
+\label{fig:gamma-sweep}
+\end{figure}
+
 This ablation clarifies why suffix decay should be treated as a schedule rather than a single fixed claim. Small and moderate $\gamma$ values preserve prefix likelihood and suppress the first error without aggressively suppressing inherited suffix text. Large $\gamma$ values more closely resemble prefix-masked DPO: they apply strong pressure to all post-error tokens, which can be useful for error suppression but risks treating consequence steps as independently wrong.
 
 \subsection{Diagnostics support the mechanism}
@@ -80,3 +87,32 @@ More-candidates HQ, 87 rows & 16 & 22 & 25 & \textbf{28} & 27 \\
 \end{table}
 
 Localization and filtering diagnostics are reported in Appendix~\ref{app:gsm8k-diagnostics}. The robust conclusion is that prefix protection matters. The suffix-decay component of \cmdpo{} remains plausible on controlled arithmetic, but the GSM8K pilots do not yet establish it as a reliable additional improvement.
+
+\subsection{A larger 1.5B run is mixed}
+
+To check whether the mechanism persists at a larger model scale, we trained Qwen2.5-1.5B-Instruct on 1,000 harder arithmetic preference pairs and evaluated on a 500-example harder arithmetic set. The generation metric is mixed: vanilla DPO achieves the highest accuracy on this particular run, while \cmdpo{} remains far above the base model but below vanilla. The likelihood probe still shows the same structural separation between prefix protection and rejected-side suppression.
+
+\begin{table}[t]
+\caption{Harder1000 training with Qwen2.5-1.5B-Instruct. Accuracy is evaluated on harder eval500. Likelihood entries are post-training minus pre-training masked log-likelihood changes on the harder1000 training set.}
+\label{tab:qwen15b}
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Model & Accuracy & Prefix $\Delta$ / Error $\Delta$ \\
+\midrule
+Base & 0.118 & -- \\
+Vanilla DPO & 0.498 & -16.626 / -36.310 \\
+\cmdpo{} & 0.224 & 21.352 / -17.321 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/scale_accuracy.png}
+\caption{Accuracy by scale. The 0.5B setting uses the mean over three seeds on harder2000; the 1.5B setting is the single harder1000 run. The larger model changes the raw-accuracy ranking, so we treat the mechanism probe as the more stable evidence.}
+\label{fig:scale-accuracy}
+\end{figure}
+
+This larger run does not support a simple stronger-is-better story for \cmdpo{}. It does, however, reinforce the paper's narrower claim: when rejected traces contain correct prefixes, vanilla DPO can suppress them aggressively, while causal masking preserves them more explicitly.

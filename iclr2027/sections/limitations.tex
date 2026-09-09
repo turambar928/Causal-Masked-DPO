@@ -4,7 +4,7 @@ The current evidence is preliminary. The strongest positive results come from co
 
 The GSM8K pilots are intentionally reported as mixed evidence. They show that the pipeline runs end-to-end and that prefix protection helps, but they do not show a reliable suffix-decay benefit. Many high-quality filtered examples still use gold-fallback chosen responses, creating a style mismatch with model-generated rejected responses.
 
-The current experiments also use Qwen2.5-0.5B-Instruct with LoRA. Larger models, stronger sampled solution generators, and better first-error judges may change the balance between prefix-masked, first-error-only, and \cmdpo{} objectives.
+The current experiments mostly use Qwen2.5-0.5B-Instruct with LoRA. We also ran a Qwen2.5-1.5B-Instruct check, and the result was mixed: vanilla DPO won on raw accuracy in that run, while \cmdpo{} still preserved the intended likelihood structure. Larger models, stronger sampled solution generators, and better first-error judges may therefore change the balance between prefix-masked, first-error-only, and \cmdpo{} objectives.
 
 The method assumes usable step segmentation and first-error localization. The controlled off-by-one experiment shows that a one-step shift can protect the true error and therefore reverse the intended training signal. This is the main practical risk of hard causal masks. A production version should use calibrated localization confidence, soft masks, or verifier-derived uncertainty instead of treating every predicted first-error index as exact.
 

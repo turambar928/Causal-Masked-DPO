@@ -76,7 +76,36 @@ The objective is a DPO-style credit-assignment objective, not a claim that the o
 
 In the current implementation, weighted rejected log-likelihoods are summed rather than normalized by the total mask mass. This keeps the amount of rejected-side evidence proportional to the number and weight of penalized tokens, but it also means different masks can change the effective gradient scale. We therefore compare variants under matched optimizer settings and include likelihood probes that report span-specific changes. A normalized variant, where each example is divided by $\sum_t w_t$, is an important control for future larger-scale experiments because it separates mask structure from total penalty mass.
 
+Define the unweighted trajectory score
+\begin{equation}
+s_\theta(x,y)=\log \policy(y\mid x)-\log \refpol(y\mid x),
+\end{equation}
+and, for a tokenized rejected response $\yl=(t_1,\ldots,t_T)$ with step-to-token blocks $\mathcal{I}_1,\ldots,\mathcal{I}_K$, the rejected-side weighted score
+\begin{equation}
+s_\theta^w(x,\yl)=\sum_{k=1}^K w_k \sum_{i\in\mathcal{I}_k}
+\left[
+\log \policy(t_i \mid x,t_{<i})
+-\log \refpol(t_i \mid x,t_{<i})
+\right].
+\end{equation}
+Then \cmdpo{} is just standard DPO applied to the score difference $s_\theta(x,\yw)-s_\theta^w(x,\yl)$, with the rejected score shaped by causal weights. The practical meaning is simple: any rejected token with weight $w_k$ inherits that factor in the DPO gradient, so protected prefix tokens contribute no rejected-side negative pressure and the first error receives full pressure.
+
+For completeness, the normalized variant is
+\begin{equation}
+\tilde s_\theta^w(x,\yl)
+=
+\frac{1}{\max(1,\sum_k w_k)}\sum_{k=1}^{K} w_k \sum_{i\in\mathcal{I}_k}
+\left[
+\log \policy(t_i \mid x,t_{<i})
+-\log \refpol(t_i \mid x,t_{<i})
+\right],
+\end{equation}
+which preserves mask structure while forcing the rejected-side scale to be comparable across examples. Our controls show that this removes some of the first-error signal in the current setting, so we treat normalization as a diagnostic rather than the default.
+
 Write the DPO logit as $\Delta_\theta = \beta\left[(r_\theta(\yw\mid x)-r_{\mathrm{ref}}(\yw\mid x))-(r_\theta^w(\yl\mid x)-r_{\mathrm{ref}}^w(\yl\mid x))\right]$. Then the gradient contribution of any rejected token $j$ is proportional to $w_j$ times the usual DPO factor. For a protected prefix token, $w_j=0$, so that token contributes no rejected-side negative gradient at all. For the first error, $w_j=1$, so it receives the full rejected-side pressure. For suffix tokens, the decayed weights interpolate smoothly between these extremes. This makes the causal meaning of the mask explicit: we are not changing the preferred response, only choosing which rejected tokens should count as evidence against the policy.
+
+\paragraph{A useful reading.}
+The paper's positive result is not that weighted rejected-side masking creates a brand-new preference objective. It is that, when a rejected trace contains heterogeneous process evidence, a minimal asymmetric reweighting is enough to stop DPO from treating the correct prefix as if it were an error. This is the part of the argument that survives across the controlled arithmetic probes, the reviewer controls, and the larger 1.5B check.
 
 \subsection{Implementation}
 

@@ -126,3 +126,31 @@ Process-positive $0.2$ & 35.330 & -14.578 & 10.583 & -12.228 \\
 \end{tabular}
 \end{center}
 \end{table}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\linewidth]{figures/control_panels.png}
+\caption{Reviewer diagnostics summarized visually. Truncation, normalization, localization noise, and process-positive augmentation each isolate a different alternative explanation, but none reproduces the clean causal-mask pattern across prefix, error, and suffix deltas.}
+\label{fig:control-panels}
+\end{figure}
+
+\subsection{Larger-model validation}
+\label{app:qwen15b}
+
+Table~\ref{tab:qwen15b-details} reports the same 1.5B run in a slightly more explicit form. The point of this check is not to claim a new benchmark win, but to verify that the causal-mask family behaves coherently beyond the 0.5B setting. The answer is mixed: vanilla DPO is stronger on raw generation accuracy in this run, but \cmdpo{} still cleanly separates prefix protection from rejected-side suppression in the likelihood probe.
+
+\begin{table}[h]
+\caption{Qwen2.5-1.5B-Instruct harder1000 validation. Likelihood entries are post-training minus pre-training masked log-likelihood changes on the training set.}
+\label{tab:qwen15b-details}
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Accuracy & Prefix $\Delta$ & Error $\Delta$ & Suffix $\Delta$ \\
+\midrule
+Base & 0.118 & -- & -- & -- \\
+Vanilla DPO & 0.498 & -16.626 & -36.310 & -18.256 \\
+\cmdpo{} & 0.224 & 21.352 & -17.321 & 12.203 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
