@@ -1,0 +1,11 @@
+{
+  "gpu": "1",
+  "output_dir": "outputs/stage1_v1/eval512",
+  "generation_batch_size": 32,
+  "probe_batch_size": 4,
+  "max_new_tokens": 512,
+  "greedy": true,
+  "use_chat_template": true,
+  "include_gsm8k_transfer": false,
+  "note": "Formal generation protocol after base-only preflight exposed frequent length-limited outputs at 256. All models use 512, with exact EOS and token-limit metadata. Previous 256-token outputs remain diagnostic only."
+}

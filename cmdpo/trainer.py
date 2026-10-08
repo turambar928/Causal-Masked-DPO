@@ -16,6 +16,8 @@ class CMDPOTrainer(Trainer):
         beta: float = 0.1,
         normalize_rejected: bool = False,
         process_positive_weight: float = 0.0,
+        chosen_nll_weight: float = 0.0,
+        objective: str = "dpo",
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -23,9 +25,12 @@ class CMDPOTrainer(Trainer):
         self.beta = beta
         self.normalize_rejected = normalize_rejected
         self.process_positive_weight = process_positive_weight
-        self.ref_model.eval()
-        for param in self.ref_model.parameters():
-            param.requires_grad_(False)
+        self.chosen_nll_weight = chosen_nll_weight
+        self.objective = objective
+        if self.ref_model is not None:
+            self.ref_model.eval()
+            for param in self.ref_model.parameters():
+                param.requires_grad_(False)
 
     def compute_loss(
         self,
@@ -41,6 +46,8 @@ class CMDPOTrainer(Trainer):
             beta=self.beta,
             normalize_rejected=self.normalize_rejected,
             process_positive_weight=self.process_positive_weight,
+            chosen_nll_weight=self.chosen_nll_weight,
+            objective=self.objective,
         )
         if return_outputs:
             return loss, metrics

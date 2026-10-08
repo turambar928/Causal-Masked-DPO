@@ -94,7 +94,7 @@ For completeness, the normalized variant is
 \begin{equation}
 \tilde s_\theta^w(x,\yl)
 =
-\frac{1}{\max(1,\sum_k w_k)}\sum_{k=1}^{K} w_k \sum_{i\in\mathcal{I}_k}
+\frac{1}{\max(1,\sum_k w_k |\mathcal{I}_k|)}\sum_{k=1}^{K} w_k \sum_{i\in\mathcal{I}_k}
 \left[
 \log \policy(t_i \mid x,t_{<i})
 -\log \refpol(t_i \mid x,t_{<i})
@@ -102,7 +102,7 @@ For completeness, the normalized variant is
 \end{equation}
 which preserves mask structure while forcing the rejected-side scale to be comparable across examples. Our controls show that this removes some of the first-error signal in the current setting, so we treat normalization as a diagnostic rather than the default.
 
-Write the DPO logit as $\Delta_\theta = \beta\left[(r_\theta(\yw\mid x)-r_{\mathrm{ref}}(\yw\mid x))-(r_\theta^w(\yl\mid x)-r_{\mathrm{ref}}^w(\yl\mid x))\right]$. Then the gradient contribution of any rejected token $j$ is proportional to $w_j$ times the usual DPO factor. For a protected prefix token, $w_j=0$, so that token contributes no rejected-side negative gradient at all. For the first error, $w_j=1$, so it receives the full rejected-side pressure. For suffix tokens, the decayed weights interpolate smoothly between these extremes. This makes the causal meaning of the mask explicit: we are not changing the preferred response, only choosing which rejected tokens should count as evidence against the policy.
+Write the DPO logit as $\Delta_\theta = \beta\left[r_\theta(\yw\mid x)-r_\theta^w(\yl\mid x)\right]$, where both rewards already include subtraction of the reference log-likelihood. Then the explicit rejected-token coefficient is proportional to $w_j$ times the logistic loss factor. For a protected prefix token, $w_j=0$, so its log-likelihood contributes no direct rejected-side negative term. This does not guarantee unchanged prefix likelihood: shared parameters and subsequent-token conditioning can still affect it. The first error receives weight one, and suffix weights decay geometrically.
 
 \paragraph{A useful reading.}
 The paper's positive result is not that weighted rejected-side masking creates a brand-new preference objective. It is that, when a rejected trace contains heterogeneous process evidence, a minimal asymmetric reweighting is enough to stop DPO from treating the correct prefix as if it were an error. This is the part of the argument that survives across the controlled arithmetic probes, the reviewer controls, and the larger 1.5B check.

@@ -1,0 +1,3 @@
+# Analysis adds rank-based independent-bank reproducibility to the existing stack.
+-r requirements-experiments.txt
+scipy==1.10.1

@@ -1,0 +1,10 @@
+{
+  "gpu": "1",
+  "generation_batch_size": 32,
+  "probe_batch_size": 4,
+  "max_new_tokens": 256,
+  "greedy": true,
+  "use_chat_template": true,
+  "include_gsm8k_transfer": false,
+  "note": "Separate frozen evaluation configuration; all base and adapter runs use the same inference batch size. Training config's eval_batch_size was a conservative preflight default."
+}

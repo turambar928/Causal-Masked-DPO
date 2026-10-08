@@ -34,6 +34,7 @@ def probe_rows(rows: list[dict[str, Any]], probe: str, gamma: float) -> list[dic
         else:
             raise ValueError(probe)
         item["step_weights"] = weights
+        item.pop("rejected_token_weights", None)
         output.append(item)
     return output
 
@@ -45,6 +46,7 @@ def mean_probe_logp(
     device: torch.device,
     batch_size: int,
     label: str,
+    per_token: bool = False,
 ) -> float:
     values: list[float] = []
     model.eval()
@@ -59,9 +61,15 @@ def mean_probe_logp(
                 batch["rejected_input_ids"],
                 batch["rejected_attention_mask"],
                 batch["rejected_response_mask"],
+                normalize=per_token,
             )
+            # An absent prefix is not a zero log probability observation.
+            active = batch["rejected_response_mask"][:, 1:].sum(-1) > 0
+            value = value[active]
             values.extend(float(x) for x in value.detach().cpu().tolist())
-    return sum(values) / max(1, len(values))
+    if not values:
+        raise ValueError(f"No nonempty spans for {label}")
+    return sum(values) / len(values)
 
 
 def load_model(
@@ -91,7 +99,11 @@ def main() -> None:
     parser.add_argument("--max-length", type=int, default=768)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--adapter", action="append", default=[], help="name=path")
+    parser.add_argument("--use-chat-template", action="store_true")
+    parser.add_argument("--per-token", action="store_true")
+    parser.add_argument("--limit", type=int)
     args = parser.parse_args()
+    torch.set_num_threads(4)
 
     use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     dtype = torch.bfloat16 if use_bf16 else (torch.float16 if torch.cuda.is_available() else torch.float32)
@@ -101,14 +113,17 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    collator = CMDPOCollator(tokenizer=tokenizer, max_length=args.max_length)
+    collator = CMDPOCollator(tokenizer=tokenizer, max_length=args.max_length,
+                            use_chat_template=args.use_chat_template, strict_length=True)
     rows = read_jsonl(args.data)
+    if args.limit:
+        rows = rows[:args.limit]
 
     probes = {probe: probe_rows(rows, probe, args.gamma) for probe in ["prefix", "error", "suffix", "cmdpo"]}
 
     base_model = load_model(args.model, None, dtype=dtype, device_map=device_map)
     before = {
-        probe: mean_probe_logp(base_model, collator, probe_items, device, args.batch_size, f"base/{probe}")
+        probe: mean_probe_logp(base_model, collator, probe_items, device, args.batch_size, f"base/{probe}", args.per_token)
         for probe, probe_items in probes.items()
     }
     del base_model
@@ -122,10 +137,12 @@ def main() -> None:
         name, path = adapter_arg.split("=", 1)
         model = load_model(args.model, path, dtype=dtype, device_map=device_map)
         after = {
-            probe: mean_probe_logp(model, collator, probe_items, device, args.batch_size, f"{name}/{probe}")
+            probe: mean_probe_logp(model, collator, probe_items, device, args.batch_size, f"{name}/{probe}", args.per_token)
             for probe, probe_items in probes.items()
         }
-        row = {"variant": name}
+        row = {"variant": name, "data": args.data, "examples": len(rows),
+               "aggregation": "mean_nonempty_example_per_token" if args.per_token else "mean_nonempty_example_sum",
+               "use_chat_template": args.use_chat_template}
         for probe in ["prefix", "error", "suffix", "cmdpo"]:
             row[f"before_{probe}"] = before[probe]
             row[f"after_{probe}"] = after[probe]

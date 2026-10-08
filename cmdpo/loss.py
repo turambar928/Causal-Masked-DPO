@@ -8,7 +8,7 @@ def token_logprobs(model: torch.nn.Module, input_ids: torch.Tensor, attention_ma
     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
     logits = outputs.logits[:, :-1, :]
     labels = input_ids[:, 1:]
-    logps = F.log_softmax(logits, dim=-1)
+    logps = F.log_softmax(logits, dim=-1, dtype=torch.float32)
     gathered = torch.gather(logps, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
     return gathered
 
@@ -32,11 +32,13 @@ def masked_sequence_logps(
 
 def cmdpo_loss(
     policy_model: torch.nn.Module,
-    ref_model: torch.nn.Module,
+    ref_model: torch.nn.Module | None,
     batch: dict[str, torch.Tensor],
     beta: float = 0.1,
     normalize_rejected: bool = False,
     process_positive_weight: float = 0.0,
+    chosen_nll_weight: float = 0.0,
+    objective: str = "dpo",
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     chosen_logps = masked_sequence_logps(
         policy_model,
@@ -44,6 +46,12 @@ def cmdpo_loss(
         batch["chosen_attention_mask"],
         batch["chosen_response_mask"],
     )
+    chosen_mass = batch["chosen_response_mask"][:, 1:].sum(-1).clamp_min(1)
+    chosen_nll = -(chosen_logps / chosen_mass).mean()
+    if objective == "sft":
+        return chosen_nll, {"loss": chosen_nll.detach(), "chosen_nll": chosen_nll.detach()}
+    if objective != "dpo":
+        raise ValueError(f"Unknown objective: {objective}")
     rejected_logps = masked_sequence_logps(
         policy_model,
         batch["rejected_input_ids"],
@@ -51,35 +59,28 @@ def cmdpo_loss(
         batch["rejected_response_mask"],
         normalize=normalize_rejected,
     )
-    with torch.no_grad():
-        chosen_ref_logps = masked_sequence_logps(
-            ref_model,
-            batch["chosen_input_ids"],
-            batch["chosen_attention_mask"],
-            batch["chosen_response_mask"],
+    positive_ref_logps = None
+    if "chosen_ref_logps" in batch:
+        chosen_ref_logps = batch["chosen_ref_logps"].detach()
+        rejected_ref_logps = batch["rejected_ref_logps"].detach()
+        if process_positive_weight > 0 and "positive_input_ids" in batch and "positive_ref_logps" in batch:
+            positive_ref_logps = batch["positive_ref_logps"].detach()
+    else:
+        if ref_model is None:
+            raise ValueError("A frozen reference or validated reference cache is required")
+        chosen_ref_logps, rejected_ref_logps, positive_ref_logps = reference_logps(
+            ref_model, batch, normalize_rejected, process_positive_weight
         )
-        rejected_ref_logps = masked_sequence_logps(
-            ref_model,
-            batch["rejected_input_ids"],
-            batch["rejected_attention_mask"],
-            batch["rejected_response_mask"],
-            normalize=normalize_rejected,
+
+    positive_logps = None
+    if positive_ref_logps is not None:
+        # The policy forward MUST remain differentiable; only the reference is frozen.
+        positive_logps = masked_sequence_logps(
+            policy_model,
+            batch["positive_input_ids"],
+            batch["positive_attention_mask"],
+            batch["positive_response_mask"],
         )
-        positive_logps = None
-        positive_ref_logps = None
-        if "positive_input_ids" in batch:
-            positive_logps = masked_sequence_logps(
-                policy_model,
-                batch["positive_input_ids"],
-                batch["positive_attention_mask"],
-                batch["positive_response_mask"],
-            )
-            positive_ref_logps = masked_sequence_logps(
-                ref_model,
-                batch["positive_input_ids"],
-                batch["positive_attention_mask"],
-                batch["positive_response_mask"],
-            )
 
     chosen_rewards = chosen_logps - chosen_ref_logps
     rejected_rewards = rejected_logps - rejected_ref_logps
@@ -90,6 +91,7 @@ def cmdpo_loss(
         losses = losses + process_positive_weight * positive_loss
     else:
         positive_loss = torch.tensor(0.0, device=losses.device)
+    losses = losses + chosen_nll_weight * chosen_nll
 
     metrics = {
         "loss": losses.detach().mean(),
@@ -97,5 +99,24 @@ def cmdpo_loss(
         "rejected_reward": rejected_rewards.detach().mean(),
         "reward_margin": (chosen_rewards - rejected_rewards).detach().mean(),
         "process_positive_loss": positive_loss.detach(),
+        "chosen_nll": chosen_nll.detach(),
     }
     return losses.mean(), metrics
+
+
+@torch.no_grad()
+def reference_logps(ref_model, batch, normalize_rejected=False, process_positive_weight=0.):
+    # Kept separate so caching and live-reference paths share exactly one definition.
+    chosen_ref_logps = masked_sequence_logps(
+        ref_model, batch["chosen_input_ids"], batch["chosen_attention_mask"], batch["chosen_response_mask"],
+    )
+    rejected_ref_logps = masked_sequence_logps(
+        ref_model, batch["rejected_input_ids"], batch["rejected_attention_mask"], batch["rejected_response_mask"],
+        normalize=normalize_rejected,
+    )
+    positive_ref_logps = None
+    if "positive_input_ids" in batch and process_positive_weight > 0:
+        positive_ref_logps = masked_sequence_logps(
+            ref_model, batch["positive_input_ids"], batch["positive_attention_mask"], batch["positive_response_mask"],
+        )
+    return chosen_ref_logps, rejected_ref_logps, positive_ref_logps

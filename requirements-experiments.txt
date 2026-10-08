@@ -1,0 +1,15 @@
+# Tested overlay for Python 3.10; install into a project environment.
+torch==2.5.1
+transformers==4.57.3
+peft==0.17.1
+accelerate==1.10.1
+datasets==4.4.1
+huggingface-hub==0.36.2
+tokenizers==0.22.2
+fsspec==2025.10.0
+pyarrow==21.0.0
+openai==2.44.0
+httpx==0.28.1
+numpy==1.26.4
+matplotlib==3.7.5
+pytest==9.1.1
